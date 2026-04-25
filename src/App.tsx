@@ -14,21 +14,34 @@ import Jobs from "./pages/Jobs";
 import Leads from "./pages/Leads";
 import Dispatch from "./pages/Dispatch";
 import Estimates from "./pages/Estimates";
-import ComingSoon from "./pages/ComingSoon";
+import Customers from "./pages/Customers";
+import Invoices from "./pages/Invoices";
+import Team from "./pages/Team";
+import PriceBook from "./pages/PriceBook";
+import Inventory from "./pages/Inventory";
+import Messages from "./pages/Messages";
+import Reports from "./pages/Reports";
+import ServiceAreas from "./pages/ServiceAreas";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const appRoutes: { path: string; title: string }[] = [
-  { path: "/customers", title: "Customers" },
-  { path: "/invoices", title: "Invoices" },
-  { path: "/team", title: "Team" },
-  { path: "/price-book", title: "Price Book" },
-  { path: "/inventory", title: "Inventory" },
-  { path: "/messages", title: "Messages" },
-  { path: "/reports", title: "Reports" },
-  { path: "/service-areas", title: "Service Areas" },
-  { path: "/settings", title: "Settings" },
+const protectedRoutes: { path: string; element: React.ReactNode }[] = [
+  { path: "/dashboard", element: <Dashboard /> },
+  { path: "/leads", element: <Leads /> },
+  { path: "/jobs", element: <Jobs /> },
+  { path: "/dispatch", element: <Dispatch /> },
+  { path: "/customers", element: <Customers /> },
+  { path: "/estimates", element: <Estimates /> },
+  { path: "/invoices", element: <Invoices /> },
+  { path: "/team", element: <Team /> },
+  { path: "/price-book", element: <PriceBook /> },
+  { path: "/inventory", element: <Inventory /> },
+  { path: "/messages", element: <Messages /> },
+  { path: "/reports", element: <Reports /> },
+  { path: "/service-areas", element: <ServiceAreas /> },
+  { path: "/settings", element: <Settings /> },
 ];
 
 const App = () => (
@@ -42,13 +55,12 @@ const App = () => (
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
-            <Route path="/dashboard" element={<ProtectedRoute><AppShell><Dashboard /></AppShell></ProtectedRoute>} />
-            <Route path="/jobs" element={<ProtectedRoute><AppShell><Jobs /></AppShell></ProtectedRoute>} />
-            <Route path="/leads" element={<ProtectedRoute><AppShell><Leads /></AppShell></ProtectedRoute>} />
-            <Route path="/dispatch" element={<ProtectedRoute><AppShell><Dispatch /></AppShell></ProtectedRoute>} />
-            <Route path="/estimates" element={<ProtectedRoute><AppShell><Estimates /></AppShell></ProtectedRoute>} />
-            {appRoutes.map((r) => (
-              <Route key={r.path} path={r.path} element={<ProtectedRoute><AppShell><ComingSoon title={r.title} /></AppShell></ProtectedRoute>} />
+            {protectedRoutes.map((r) => (
+              <Route
+                key={r.path}
+                path={r.path}
+                element={<ProtectedRoute><AppShell>{r.element}</AppShell></ProtectedRoute>}
+              />
             ))}
             <Route path="*" element={<NotFound />} />
           </Routes>
