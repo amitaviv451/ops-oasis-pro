@@ -12,6 +12,7 @@ import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
 import Leads from "./pages/Leads";
+import Dispatch from "./pages/Dispatch";
 import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound";
 
