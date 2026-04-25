@@ -12,13 +12,13 @@ import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
 import Leads from "./pages/Leads";
+import Dispatch from "./pages/Dispatch";
 import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
 const appRoutes: { path: string; title: string }[] = [
-  { path: "/dispatch", title: "Dispatch" },
   { path: "/customers", title: "Customers" },
   { path: "/estimates", title: "Estimates" },
   { path: "/invoices", title: "Invoices" },
@@ -45,6 +45,7 @@ const App = () => (
             <Route path="/dashboard" element={<ProtectedRoute><AppShell><Dashboard /></AppShell></ProtectedRoute>} />
             <Route path="/jobs" element={<ProtectedRoute><AppShell><Jobs /></AppShell></ProtectedRoute>} />
             <Route path="/leads" element={<ProtectedRoute><AppShell><Leads /></AppShell></ProtectedRoute>} />
+            <Route path="/dispatch" element={<ProtectedRoute><AppShell><Dispatch /></AppShell></ProtectedRoute>} />
             {appRoutes.map((r) => (
               <Route key={r.path} path={r.path} element={<ProtectedRoute><AppShell><ComingSoon title={r.title} /></AppShell></ProtectedRoute>} />
             ))}
