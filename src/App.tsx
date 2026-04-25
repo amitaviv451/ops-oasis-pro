@@ -13,6 +13,7 @@ import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
 import Leads from "./pages/Leads";
 import Dispatch from "./pages/Dispatch";
+import Estimates from "./pages/Estimates";
 import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound";
 
