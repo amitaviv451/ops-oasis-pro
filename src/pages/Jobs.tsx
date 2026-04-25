@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Search, Briefcase, Pencil } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Plus, Search, Briefcase, Pencil, Receipt } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,7 @@ const emptyForm: FormState = {
 
 const Jobs = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -64,6 +66,33 @@ const Jobs = () => {
   const [editing, setEditing] = useState<Job | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [invoicingId, setInvoicingId] = useState<string | null>(null);
+
+  const createInvoiceFromJob = async (job: Job) => {
+    if (!user) return;
+    setInvoicingId(job.id);
+    const { data: profile } = await supabase
+      .from("profiles").select("organization_id").eq("id", user.id).single();
+    if (!profile?.organization_id) {
+      toast({ title: "No organization found", variant: "destructive" });
+      setInvoicingId(null);
+      return;
+    }
+    const amount = job.actual_cost ?? job.estimated_cost ?? 0;
+    const { error } = await supabase.from("invoices").insert({
+      organization_id: profile.organization_id,
+      customer_name: job.customer_name,
+      amount,
+      status: "DRAFT",
+    });
+    setInvoicingId(null);
+    if (error) {
+      toast({ title: "Failed to create invoice", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: `Invoice drafted for #${job.job_number}`, description: `$${Number(amount).toLocaleString()} — ${job.customer_name ?? "no customer"}` });
+    navigate("/invoices");
+  };
 
   const loadJobs = async () => {
     setLoading(true);
@@ -276,8 +305,21 @@ const Jobs = () => {
                   <TableCell className="text-right font-mono text-sm">
                     {job.estimated_cost != null ? `$${Number(job.estimated_cost).toLocaleString()}` : "—"}
                   </TableCell>
-                  <TableCell>
-                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    {job.status === "COMPLETED" ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 gap-1.5 px-2 text-xs"
+                        disabled={invoicingId === job.id}
+                        onClick={() => createInvoiceFromJob(job)}
+                      >
+                        <Receipt className="h-3.5 w-3.5" />
+                        {invoicingId === job.id ? "..." : "Invoice"}
+                      </Button>
+                    ) : (
+                      <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
