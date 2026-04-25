@@ -49,9 +49,14 @@ const Settings = () => {
     e.preventDefault();
     if (!orgId) return;
     setSavingOrg(true);
-    const { error } = await supabase.from("organizations").update({ name: orgName.trim() }).eq("id", orgId);
+    const { data, error } = await supabase.functions.invoke("update-organization", {
+      body: { name: orgName.trim() },
+    });
     setSavingOrg(false);
-    if (error) return toast({ title: "Save failed", description: error.message, variant: "destructive" });
+    if (error || (data && (data as { error?: string }).error)) {
+      const msg = (data as { error?: string } | null)?.error ?? error?.message ?? "Save failed";
+      return toast({ title: "Save failed", description: msg, variant: "destructive" });
+    }
     toast({ title: "Company updated" });
   };
 
