@@ -14,6 +14,53 @@ export type Database = {
   }
   public: {
     Tables: {
+      estimates: {
+        Row: {
+          amount: number
+          created_at: string
+          customer_name: string | null
+          estimate_number: number
+          id: string
+          notes: string | null
+          organization_id: string
+          status: Database["public"]["Enums"]["estimate_status"]
+          title: string
+          valid_until: string | null
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          customer_name?: string | null
+          estimate_number?: number
+          id?: string
+          notes?: string | null
+          organization_id: string
+          status?: Database["public"]["Enums"]["estimate_status"]
+          title: string
+          valid_until?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          customer_name?: string | null
+          estimate_number?: number
+          id?: string
+          notes?: string | null
+          organization_id?: string
+          status?: Database["public"]["Enums"]["estimate_status"]
+          title?: string
+          valid_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimates_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoices: {
         Row: {
           amount: number
@@ -232,6 +279,7 @@ export type Database = {
     }
     Enums: {
       app_role: "OWNER" | "ADMIN" | "DISPATCHER" | "TECHNICIAN"
+      estimate_status: "DRAFT" | "SENT" | "ACCEPTED" | "DECLINED" | "EXPIRED"
       invoice_status: "DRAFT" | "SENT" | "PAID" | "OVERDUE"
       job_status:
         | "NEW"
@@ -368,6 +416,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["OWNER", "ADMIN", "DISPATCHER", "TECHNICIAN"],
+      estimate_status: ["DRAFT", "SENT", "ACCEPTED", "DECLINED", "EXPIRED"],
       invoice_status: ["DRAFT", "SENT", "PAID", "OVERDUE"],
       job_status: ["NEW", "SCHEDULED", "IN_PROGRESS", "COMPLETED", "CANCELLED"],
       lead_status: ["NEW", "CONTACTED", "QUALIFIED", "CONVERTED", "LOST"],
