@@ -43,6 +43,7 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/dashboard" element={<ProtectedRoute><AppShell><Dashboard /></AppShell></ProtectedRoute>} />
+            <Route path="/jobs" element={<ProtectedRoute><AppShell><Jobs /></AppShell></ProtectedRoute>} />
             {appRoutes.map((r) => (
               <Route key={r.path} path={r.path} element={<ProtectedRoute><AppShell><ComingSoon title={r.title} /></AppShell></ProtectedRoute>} />
             ))}
