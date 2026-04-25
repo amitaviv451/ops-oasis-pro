@@ -18,7 +18,6 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 const appRoutes: { path: string; title: string }[] = [
-  { path: "/leads", title: "Leads" },
   { path: "/dispatch", title: "Dispatch" },
   { path: "/customers", title: "Customers" },
   { path: "/estimates", title: "Estimates" },
