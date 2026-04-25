@@ -10,6 +10,7 @@ import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
+import Jobs from "./pages/Jobs";
 import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound";
 
@@ -17,7 +18,6 @@ const queryClient = new QueryClient();
 
 const appRoutes: { path: string; title: string }[] = [
   { path: "/leads", title: "Leads" },
-  { path: "/jobs", title: "Jobs" },
   { path: "/dispatch", title: "Dispatch" },
   { path: "/customers", title: "Customers" },
   { path: "/estimates", title: "Estimates" },
