@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      customers: {
+        Row: {
+          address: string | null
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          notes: string | null
+          organization_id: string
+          phone: string | null
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          organization_id: string
+          phone?: string | null
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          organization_id?: string
+          phone?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customers_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       estimates: {
         Row: {
           amount: number
@@ -54,6 +95,50 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "estimates_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_items: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          organization_id: string
+          quantity: number
+          reorder_point: number
+          sku: string | null
+          unit: string
+          unit_cost: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          organization_id: string
+          quantity?: number
+          reorder_point?: number
+          sku?: string | null
+          unit?: string
+          unit_cost?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          organization_id?: string
+          quantity?: number
+          reorder_point?: number
+          sku?: string | null
+          unit?: string
+          unit_cost?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_items_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -181,6 +266,44 @@ export type Database = {
           },
         ]
       }
+      messages: {
+        Row: {
+          body: string
+          channel: Database["public"]["Enums"]["message_channel"]
+          contact_name: string
+          created_at: string
+          direction: Database["public"]["Enums"]["message_direction"]
+          id: string
+          organization_id: string
+        }
+        Insert: {
+          body: string
+          channel?: Database["public"]["Enums"]["message_channel"]
+          contact_name: string
+          created_at?: string
+          direction?: Database["public"]["Enums"]["message_direction"]
+          id?: string
+          organization_id: string
+        }
+        Update: {
+          body?: string
+          channel?: Database["public"]["Enums"]["message_channel"]
+          contact_name?: string
+          created_at?: string
+          direction?: Database["public"]["Enums"]["message_direction"]
+          id?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           created_at: string
@@ -198,6 +321,47 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      price_book_items: {
+        Row: {
+          category: string | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          organization_id: string
+          taxable: boolean
+          unit_price: number
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          organization_id: string
+          taxable?: boolean
+          unit_price?: number
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          organization_id?: string
+          taxable?: boolean
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "price_book_items_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -224,6 +388,41 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "profiles_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      service_areas: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          organization_id: string
+          zip_codes: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          organization_id: string
+          zip_codes?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          organization_id?: string
+          zip_codes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_areas_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -288,6 +487,8 @@ export type Database = {
         | "COMPLETED"
         | "CANCELLED"
       lead_status: "NEW" | "CONTACTED" | "QUALIFIED" | "CONVERTED" | "LOST"
+      message_channel: "SMS" | "EMAIL" | "CALL"
+      message_direction: "INBOUND" | "OUTBOUND"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -420,6 +621,8 @@ export const Constants = {
       invoice_status: ["DRAFT", "SENT", "PAID", "OVERDUE"],
       job_status: ["NEW", "SCHEDULED", "IN_PROGRESS", "COMPLETED", "CANCELLED"],
       lead_status: ["NEW", "CONTACTED", "QUALIFIED", "CONVERTED", "LOST"],
+      message_channel: ["SMS", "EMAIL", "CALL"],
+      message_direction: ["INBOUND", "OUTBOUND"],
     },
   },
 } as const
