@@ -21,7 +21,6 @@ const queryClient = new QueryClient();
 
 const appRoutes: { path: string; title: string }[] = [
   { path: "/customers", title: "Customers" },
-  { path: "/estimates", title: "Estimates" },
   { path: "/invoices", title: "Invoices" },
   { path: "/team", title: "Team" },
   { path: "/price-book", title: "Price Book" },
