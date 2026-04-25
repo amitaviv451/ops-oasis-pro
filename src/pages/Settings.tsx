@@ -1,17 +1,20 @@
 import { useEffect, useState } from "react";
-import { Building2, User } from "lucide-react";
+import { Building2, User, Palette, Sun, Moon, Monitor } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useOrgId } from "@/lib/useOrgId";
+import { useTheme, type Theme } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 const Settings = () => {
   const { user } = useAuth();
   const orgId = useOrgId();
+  const { theme, setTheme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingOrg, setSavingOrg] = useState(false);
@@ -88,6 +91,46 @@ const Settings = () => {
               <Button type="submit" disabled={savingOrg}>{savingOrg ? "Saving..." : "Save company"}</Button>
             </div>
           </form>
+
+          <div className="rounded-xl border border-border bg-card p-6 shadow-soft lg:col-span-2">
+            <div className="mb-4 flex items-center gap-2">
+              <Palette className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold">Appearance</h2>
+            </div>
+            <p className="mb-4 text-xs text-muted-foreground">Choose how FieldPro looks. System matches your device.</p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {([
+                { value: "light", label: "Light", Icon: Sun },
+                { value: "dark", label: "Dark", Icon: Moon },
+                { value: "system", label: "System", Icon: Monitor },
+              ] as const).map(({ value, label, Icon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setTheme(value as Theme)}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg border p-3 text-left transition-colors",
+                    theme === value
+                      ? "border-primary bg-accent"
+                      : "border-border bg-background hover:bg-accent/50",
+                  )}
+                >
+                  <div className={cn(
+                    "grid h-9 w-9 place-items-center rounded-md",
+                    theme === value ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground",
+                  )}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium">{label}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {value === "system" ? "Follow OS" : `${label} theme`}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>
