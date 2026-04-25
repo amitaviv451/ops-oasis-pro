@@ -57,6 +57,7 @@ const emptyForm: FormState = {
 
 const Jobs = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -65,6 +66,33 @@ const Jobs = () => {
   const [editing, setEditing] = useState<Job | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [invoicingId, setInvoicingId] = useState<string | null>(null);
+
+  const createInvoiceFromJob = async (job: Job) => {
+    if (!user) return;
+    setInvoicingId(job.id);
+    const { data: profile } = await supabase
+      .from("profiles").select("organization_id").eq("id", user.id).single();
+    if (!profile?.organization_id) {
+      toast({ title: "No organization found", variant: "destructive" });
+      setInvoicingId(null);
+      return;
+    }
+    const amount = job.actual_cost ?? job.estimated_cost ?? 0;
+    const { error } = await supabase.from("invoices").insert({
+      organization_id: profile.organization_id,
+      customer_name: job.customer_name,
+      amount,
+      status: "DRAFT",
+    });
+    setInvoicingId(null);
+    if (error) {
+      toast({ title: "Failed to create invoice", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: `Invoice drafted for #${job.job_number}`, description: `$${Number(amount).toLocaleString()} — ${job.customer_name ?? "no customer"}` });
+    navigate("/invoices");
+  };
 
   const loadJobs = async () => {
     setLoading(true);
