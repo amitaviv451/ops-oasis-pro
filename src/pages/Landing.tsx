@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { ArrowRight, Calendar, ClipboardList, CreditCard, Users, Zap, MapPin, BarChart3, MessageSquare, Check, Star } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
@@ -13,18 +13,8 @@ const fadeUp = {
 const Landing = () => {
   const [annual, setAnnual] = useState(false);
 
-  // Force light mode on the landing page regardless of user theme preference
-  useEffect(() => {
-    const root = document.documentElement;
-    const wasDark = root.classList.contains("dark");
-    root.classList.remove("dark");
-    return () => {
-      if (wasDark) root.classList.add("dark");
-    };
-  }, []);
-
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="landing-light min-h-screen bg-background text-foreground">
       {/* Nav */}
       <header className="sticky top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur-xl">
         <div className="container flex h-16 items-center justify-between">
