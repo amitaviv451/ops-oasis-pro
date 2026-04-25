@@ -1,0 +1,58 @@
+name: Security Scan
+
+on:
+  pull_request:
+    branches: ["**"]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-audit:
+    name: Dependency audit (npm audit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Setup Node (for npm audit)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # bun.lock is not understood by `npm audit`. Generate a package-lock.json
+      # on the fly so npm can audit the resolved dependency tree, then run audit
+      # at high severity. Fails the job on any high or critical advisory.
+      - name: Generate package-lock for audit
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Run npm audit (fail on high/critical)
+        run: npm audit --omit=dev --audit-level=high
+
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Scan the full history on push, and only the PR diff on pull_request
+          # (gitleaks-action handles this automatically based on the event).
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "true"
+          GITLEAKS_ENABLE_SUMMARY: "true"
