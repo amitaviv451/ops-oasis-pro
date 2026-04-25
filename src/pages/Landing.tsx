@@ -45,9 +45,9 @@ const Landing = () => {
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-success" />
               Now serving 2,400+ field service teams
             </div>
-            <h1 className="text-balance text-4xl font-bold leading-[1.2] tracking-tight sm:text-5xl md:text-6xl md:leading-[1.15]">
+            <h1 className="text-balance text-4xl font-bold leading-[1.2] tracking-tight text-foreground sm:text-5xl md:text-6xl md:leading-[1.15]">
               Run your field service business{" "}
-              <span className="bg-gradient-primary bg-clip-text text-transparent [-webkit-box-decoration-break:clone] [box-decoration-break:clone]">
+              <span className="text-gradient-heading">
                 like the best in the trade.
               </span>
             </h1>
