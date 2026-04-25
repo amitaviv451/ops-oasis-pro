@@ -45,6 +45,7 @@ const App = () => (
             <Route path="/dashboard" element={<ProtectedRoute><AppShell><Dashboard /></AppShell></ProtectedRoute>} />
             <Route path="/jobs" element={<ProtectedRoute><AppShell><Jobs /></AppShell></ProtectedRoute>} />
             <Route path="/leads" element={<ProtectedRoute><AppShell><Leads /></AppShell></ProtectedRoute>} />
+            <Route path="/dispatch" element={<ProtectedRoute><AppShell><Dispatch /></AppShell></ProtectedRoute>} />
             {appRoutes.map((r) => (
               <Route key={r.path} path={r.path} element={<ProtectedRoute><AppShell><ComingSoon title={r.title} /></AppShell></ProtectedRoute>} />
             ))}
