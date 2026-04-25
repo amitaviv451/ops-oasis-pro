@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Search, Briefcase, Pencil } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Plus, Search, Briefcase, Pencil, Receipt } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
