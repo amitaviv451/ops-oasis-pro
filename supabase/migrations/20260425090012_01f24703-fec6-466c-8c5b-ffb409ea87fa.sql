@@ -1,0 +1,1 @@
+DROP POLICY "Authenticated can create org" ON public.organizations;
