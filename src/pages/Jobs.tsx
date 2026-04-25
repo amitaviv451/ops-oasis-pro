@@ -305,8 +305,21 @@ const Jobs = () => {
                   <TableCell className="text-right font-mono text-sm">
                     {job.estimated_cost != null ? `$${Number(job.estimated_cost).toLocaleString()}` : "—"}
                   </TableCell>
-                  <TableCell>
-                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    {job.status === "COMPLETED" ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 gap-1.5 px-2 text-xs"
+                        disabled={invoicingId === job.id}
+                        onClick={() => createInvoiceFromJob(job)}
+                      >
+                        <Receipt className="h-3.5 w-3.5" />
+                        {invoicingId === job.id ? "..." : "Invoice"}
+                      </Button>
+                    ) : (
+                      <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
