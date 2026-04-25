@@ -45,8 +45,11 @@ const Landing = () => {
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-success" />
               Now serving 2,400+ field service teams
             </div>
-            <h1 className="text-balance text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-              Run your field service business <span className="bg-gradient-primary bg-clip-text text-transparent">like the best in the trade.</span>
+            <h1 className="text-balance text-4xl font-bold leading-[1.1] tracking-tight sm:text-5xl md:text-6xl md:leading-[1.05]">
+              Run your field service business{" "}
+              <span className="bg-gradient-primary bg-clip-text pb-2 text-transparent">
+                like the best in the trade.
+              </span>
             </h1>
             <p className="mt-6 text-balance text-lg text-muted-foreground md:text-xl">
               Scheduling, dispatch, estimates, invoicing, and payments — in one tool built for plumbing, HVAC, electrical, and landscaping pros.
