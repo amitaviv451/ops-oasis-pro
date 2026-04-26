@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Plus, Search, Receipt, Download, CheckCircle } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,6 +14,10 @@ import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { LineItemEditor, LineItem, blankItem, computeTotals } from "@/components/LineItemEditor";
 import { downloadInvoicePdf } from "@/lib/invoicePdf";
+import { useDebounce } from "@/hooks/use-debounce";
+import { usePageParam } from "@/hooks/use-page-param";
+import { DataPagination, PAGE_SIZE } from "@/components/DataPagination";
+import { EmptyState } from "@/components/EmptyState";
 
 type Status = "DRAFT" | "SENT" | "PAID" | "OVERDUE";
 const STATUSES: Status[] = ["DRAFT", "SENT", "PAID", "OVERDUE"];
@@ -41,9 +45,14 @@ const styles: Record<Status, string> = {
 const Invoices = () => {
   const orgId = useOrgId();
   const [items, setItems] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [totals, setTotals] = useState({ paid: 0, outstanding: 0, overdue: 0 });
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [pageLoading, setPageLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
   const [filter, setFilter] = useState<"ALL" | Status>("ALL");
+  const [page, setPage] = usePageParam();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Invoice | null>(null);
   const [saving, setSaving] = useState(false);
@@ -55,33 +64,38 @@ const Invoices = () => {
   });
   const [lines, setLines] = useState<LineItem[]>([blankItem()]);
 
-  const load = async () => {
-    setLoading(true);
-    const { data, error } = await supabase.from("invoices").select("*").order("issued_at", { ascending: false });
-    if (error) toast({ title: "Failed to load", description: error.message, variant: "destructive" });
-    else setItems((data ?? []) as Invoice[]);
-    setLoading(false);
-  };
+  const loadTotals = useCallback(async () => {
+    const { data } = await supabase.from("invoices").select("status, amount");
+    const rows = (data ?? []) as { status: Status; amount: number }[];
+    setTotals({
+      paid: rows.filter((i) => i.status === "PAID").reduce((s, i) => s + Number(i.amount), 0),
+      outstanding: rows.filter((i) => i.status === "SENT" || i.status === "OVERDUE").reduce((s, i) => s + Number(i.amount), 0),
+      overdue: rows.filter((i) => i.status === "OVERDUE").reduce((s, i) => s + Number(i.amount), 0),
+    });
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  const load = useCallback(async (isInitial: boolean) => {
+    if (isInitial) setInitialLoading(true); else setPageLoading(true);
+    let query = supabase.from("invoices").select("*", { count: "exact" }).order("issued_at", { ascending: false });
+    if (filter !== "ALL") query = query.eq("status", filter);
+    const q = debouncedSearch.trim();
+    if (q) query = query.ilike("customer_name", `%${q}%`);
+    const from = (page - 1) * PAGE_SIZE;
+    const { data, error, count } = await query.range(from, from + PAGE_SIZE - 1);
+    if (error) toast({ title: "Failed to load", description: error.message, variant: "destructive" });
+    else { setItems((data ?? []) as Invoice[]); setTotal(count ?? 0); }
+    if (isInitial) setInitialLoading(false); else setPageLoading(false);
+  }, [debouncedSearch, filter, page]);
+
+  useEffect(() => { if (page !== 1) setPage(1); /* eslint-disable-next-line */ }, [debouncedSearch, filter]);
+  useEffect(() => { load(initialLoading); /* eslint-disable-next-line */ }, [load]);
+  useEffect(() => { loadTotals(); }, [loadTotals]);
 
   useEffect(() => {
     if (!orgId) return;
     supabase.from("organizations").select("name").eq("id", orgId).single()
       .then(({ data }) => { if (data?.name) setOrgName(data.name); });
   }, [orgId]);
-
-  const filtered = useMemo(() => items.filter((i) => {
-    if (filter !== "ALL" && i.status !== filter) return false;
-    if (!search.trim()) return true;
-    return (i.customer_name ?? "").toLowerCase().includes(search.toLowerCase());
-  }), [items, search, filter]);
-
-  const totals = useMemo(() => ({
-    paid: items.filter((i) => i.status === "PAID").reduce((s, i) => s + Number(i.amount), 0),
-    outstanding: items.filter((i) => i.status === "SENT" || i.status === "OVERDUE").reduce((s, i) => s + Number(i.amount), 0),
-    overdue: items.filter((i) => i.status === "OVERDUE").reduce((s, i) => s + Number(i.amount), 0),
-  }), [items]);
 
   const openNew = () => {
     setEditing(null);
@@ -93,10 +107,8 @@ const Invoices = () => {
   const openEdit = async (i: Invoice) => {
     setEditing(i);
     setForm({
-      customer_name: i.customer_name ?? "",
-      status: i.status,
-      due_date: i.due_date ?? "",
-      tax_rate: Number(i.tax_rate ?? 0),
+      customer_name: i.customer_name ?? "", status: i.status,
+      due_date: i.due_date ?? "", tax_rate: Number(i.tax_rate ?? 0),
     });
     const { data } = await supabase.from("invoice_items").select("*").eq("invoice_id", i.id).order("position");
     setLines(((data ?? []) as any[]).map((l) => ({
@@ -110,13 +122,10 @@ const Invoices = () => {
     await supabase.from("invoice_items").delete().eq("invoice_id", invoiceId);
     if (lines.length === 0) return;
     const rows = lines.map((it, idx) => ({
-      invoice_id: invoiceId,
-      organization_id,
+      invoice_id: invoiceId, organization_id,
       description: it.description || "Item",
-      quantity: Number(it.quantity) || 0,
-      unit_price: Number(it.unit_price) || 0,
-      total: Number(it.total) || 0,
-      position: idx,
+      quantity: Number(it.quantity) || 0, unit_price: Number(it.unit_price) || 0,
+      total: Number(it.total) || 0, position: idx,
     }));
     const { error } = await supabase.from("invoice_items").insert(rows);
     if (error) throw error;
@@ -129,9 +138,7 @@ const Invoices = () => {
     const { grandTotal } = computeTotals(lines, form.tax_rate);
     const payload: any = {
       customer_name: form.customer_name.trim() || null,
-      amount: grandTotal,
-      status: form.status,
-      tax_rate: form.tax_rate,
+      amount: grandTotal, status: form.status, tax_rate: form.tax_rate,
       due_date: form.due_date || null,
       paid_at: form.status === "PAID" ? new Date().toISOString() : null,
     };
@@ -149,7 +156,7 @@ const Invoices = () => {
       await persistItems(invoiceId, orgId);
       toast({ title: editing ? "Invoice updated" : "Invoice created" });
       setOpen(false);
-      load();
+      load(false); loadTotals();
     } catch (err: any) {
       toast({ title: "Save failed", description: err?.message ?? "Unknown error", variant: "destructive" });
     } finally {
@@ -160,14 +167,12 @@ const Invoices = () => {
   const markPaid = async (inv: Invoice) => {
     setActionPending(inv.id);
     const { error } = await supabase.from("invoices").update({
-      status: "PAID",
-      paid_at: new Date().toISOString(),
-      payment_amount: inv.amount,
+      status: "PAID", paid_at: new Date().toISOString(), payment_amount: inv.amount,
     } as any).eq("id", inv.id);
     setActionPending(null);
-    if (error) { toast({ title: "Update failed", description: error.message, variant: "destructive" }); return; }
+    if (error) return toast({ title: "Update failed", description: error.message, variant: "destructive" });
     toast({ title: "Marked as paid" });
-    load();
+    load(false); loadTotals();
   };
 
   const downloadPdf = async (inv: Invoice) => {
@@ -181,19 +186,16 @@ const Invoices = () => {
       const taxRate = Number(inv.tax_rate ?? 0);
       const subtotal = itemRows.reduce((s, it) => s + it.total, 0);
       const tax = Math.round(subtotal * (taxRate / 100) * 100) / 100;
-      const total = subtotal + tax;
-      const paid = Number(inv.payment_amount ?? (inv.status === "PAID" ? total : 0));
-      const due = Math.max(0, total - paid);
-
-      // Best-effort short id as the human invoice number
+      const grand = subtotal + tax;
+      const paid = Number(inv.payment_amount ?? (inv.status === "PAID" ? grand : 0));
+      const due = Math.max(0, grand - paid);
       await downloadInvoicePdf({
         companyName: orgName,
         invoiceNumber: inv.id.slice(0, 8).toUpperCase(),
         customerName: inv.customer_name ?? "—",
         issueDate: format(new Date(inv.issued_at), "MMM d, yyyy"),
         dueDate: inv.due_date ? format(new Date(inv.due_date), "MMM d, yyyy") : undefined,
-        items: itemRows,
-        subtotal, taxRate, tax, total,
+        items: itemRows, subtotal, taxRate, tax, total: grand,
         amountPaid: paid, amountDue: due,
       });
     } catch (err: any) {
@@ -202,6 +204,9 @@ const Invoices = () => {
       setActionPending(null);
     }
   };
+
+  const isFiltered = debouncedSearch.trim().length > 0 || filter !== "ALL";
+  const clearFilters = () => { setSearch(""); setFilter("ALL"); };
 
   return (
     <div className="space-y-6">
@@ -236,51 +241,57 @@ const Invoices = () => {
       </div>
 
       <div className="rounded-xl border border-border bg-card shadow-soft">
-        {loading ? (
+        {initialLoading ? (
           <div className="space-y-2 p-6">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="grid h-12 w-12 place-items-center rounded-full bg-accent text-accent-foreground"><Receipt className="h-5 w-5" /></div>
-            <h2 className="mt-4 text-lg font-semibold">{items.length === 0 ? "No invoices yet" : "No matches"}</h2>
-            <p className="mt-2 text-sm text-muted-foreground">{items.length === 0 ? "Create your first invoice." : "Adjust your filters."}</p>
-            {items.length === 0 && <Button onClick={openNew} className="mt-4 gap-2"><Plus className="h-4 w-4" /> New invoice</Button>}
-          </div>
+        ) : items.length === 0 ? (
+          <EmptyState
+            icon={<Receipt className="h-5 w-5" />}
+            title="No invoices yet"
+            description="Create your first invoice."
+            actionLabel="New invoice"
+            onAction={isFiltered ? clearFilters : openNew}
+            filtered={isFiltered}
+            query={debouncedSearch}
+          />
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Customer</TableHead>
-                <TableHead>Issued</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead className="w-[230px] text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((i) => (
-                <TableRow key={i.id} className="cursor-pointer" onClick={() => openEdit(i)}>
-                  <TableCell className="font-medium">{i.customer_name ?? "—"}</TableCell>
-                  <TableCell className="text-muted-foreground">{format(new Date(i.issued_at), "MMM d, yyyy")}</TableCell>
-                  <TableCell>
-                    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide", styles[i.status])}>{i.status}</span>
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm">${Number(i.amount).toLocaleString()}</TableCell>
-                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center justify-end gap-1">
-                      {i.status === "SENT" && (
-                        <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" disabled={actionPending === i.id} onClick={() => markPaid(i)}>
-                          <CheckCircle className="h-3 w-3" /> Mark paid
-                        </Button>
-                      )}
-                      <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" disabled={actionPending === i.id} onClick={() => downloadPdf(i)}>
-                        <Download className="h-3 w-3" /> PDF
-                      </Button>
-                    </div>
-                  </TableCell>
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Issued</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="w-[230px] text-right">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {items.map((i) => (
+                  <TableRow key={i.id} className="cursor-pointer" onClick={() => openEdit(i)}>
+                    <TableCell className="font-medium">{i.customer_name ?? "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{format(new Date(i.issued_at), "MMM d, yyyy")}</TableCell>
+                    <TableCell>
+                      <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide", styles[i.status])}>{i.status}</span>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm">${Number(i.amount).toLocaleString()}</TableCell>
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1">
+                        {i.status === "SENT" && (
+                          <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" disabled={actionPending === i.id} onClick={() => markPaid(i)}>
+                            <CheckCircle className="h-3 w-3" /> Mark paid
+                          </Button>
+                        )}
+                        <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" disabled={actionPending === i.id} onClick={() => downloadPdf(i)}>
+                          <Download className="h-3 w-3" /> PDF
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <DataPagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} loading={pageLoading} />
+          </>
         )}
       </div>
 
@@ -304,12 +315,9 @@ const Invoices = () => {
             <div className="space-y-2">
               <Label>Line items</Label>
               <LineItemEditor
-                items={lines}
-                onChange={setLines}
-                taxRate={form.tax_rate}
-                onTaxRateChange={(n) => setForm({ ...form, tax_rate: n })}
-                amountPaid={editing?.payment_amount ?? 0}
-                showPaid={!!editing}
+                items={lines} onChange={setLines}
+                taxRate={form.tax_rate} onTaxRateChange={(n) => setForm({ ...form, tax_rate: n })}
+                amountPaid={editing?.payment_amount ?? 0} showPaid={!!editing}
               />
             </div>
             <div className="grid grid-cols-2 gap-3">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Search, FileText, Send, Check, X, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
@@ -14,8 +14,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { LineItemEditor, LineItem, blankItem, computeTotals } from "@/components/LineItemEditor";
+import { useDebounce } from "@/hooks/use-debounce";
+import { usePageParam } from "@/hooks/use-page-param";
+import { DataPagination, PAGE_SIZE } from "@/components/DataPagination";
+import { EmptyState } from "@/components/EmptyState";
 
-// DB enum uses ACCEPTED in place of "APPROVED"
 type EstimateStatus = "DRAFT" | "SENT" | "ACCEPTED" | "DECLINED" | "EXPIRED";
 
 interface Estimate {
@@ -46,46 +49,56 @@ const Estimates = () => {
   const orgId = useOrgId();
   const navigate = useNavigate();
   const [estimates, setEstimates] = useState<Estimate[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [aggregates, setAggregates] = useState({ accepted: 0, outstanding: 0, counts: {} as Record<string, number> });
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [pageLoading, setPageLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState<"ALL" | EstimateStatus>("ALL");
+  const [page, setPage] = usePageParam();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Estimate | null>(null);
   const [saving, setSaving] = useState(false);
   const [actionPending, setActionPending] = useState<string | null>(null);
 
-  const [form, setForm] = useState({
-    title: "", customer_name: "", valid_until: "", notes: "", tax_rate: 0,
-  });
+  const [form, setForm] = useState({ title: "", customer_name: "", valid_until: "", notes: "", tax_rate: 0 });
   const [items, setItems] = useState<LineItem[]>([blankItem()]);
 
-  const load = async () => {
-    setLoading(true);
-    const { data, error } = await supabase.from("estimates").select("*").order("created_at", { ascending: false });
-    if (error) toast({ title: "Failed to load estimates", description: error.message, variant: "destructive" });
-    else setEstimates((data ?? []) as Estimate[]);
-    setLoading(false);
-  };
-  useEffect(() => { load(); }, []);
-
-  const filtered = useMemo(() => estimates.filter((e) => {
-    if (statusFilter !== "ALL" && e.status !== statusFilter) return false;
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return e.title.toLowerCase().includes(q) || (e.customer_name ?? "").toLowerCase().includes(q) || String(e.estimate_number).includes(q);
-  }), [estimates, search, statusFilter]);
-
-  const counts = useMemo(() => {
-    const c: Record<string, number> = { ALL: estimates.length };
+  const loadAggregates = useCallback(async () => {
+    const { data } = await supabase.from("estimates").select("status, amount");
+    const c: Record<string, number> = { ALL: (data ?? []).length };
     STATUSES.forEach((s) => (c[s] = 0));
-    estimates.forEach((e) => (c[e.status] = (c[e.status] ?? 0) + 1));
-    return c;
-  }, [estimates]);
+    let accepted = 0, outstanding = 0;
+    (data ?? []).forEach((r: any) => {
+      c[r.status] = (c[r.status] ?? 0) + 1;
+      if (r.status === "ACCEPTED") accepted += Number(r.amount);
+      if (r.status === "SENT") outstanding += Number(r.amount);
+    });
+    setAggregates({ accepted, outstanding, counts: c });
+  }, []);
 
-  const totals = useMemo(() => ({
-    accepted: estimates.filter((e) => e.status === "ACCEPTED").reduce((s, e) => s + Number(e.amount), 0),
-    outstanding: estimates.filter((e) => e.status === "SENT").reduce((s, e) => s + Number(e.amount), 0),
-  }), [estimates]);
+  const load = useCallback(async (isInitial: boolean) => {
+    if (isInitial) setInitialLoading(true); else setPageLoading(true);
+    let query = supabase.from("estimates").select("*", { count: "exact" }).order("created_at", { ascending: false });
+    if (statusFilter !== "ALL") query = query.eq("status", statusFilter);
+    const q = debouncedSearch.trim();
+    if (q) {
+      const num = Number(q);
+      const ors = [`title.ilike.%${q}%`, `customer_name.ilike.%${q}%`];
+      if (!isNaN(num)) ors.push(`estimate_number.eq.${num}`);
+      query = query.or(ors.join(","));
+    }
+    const from = (page - 1) * PAGE_SIZE;
+    const { data, error, count } = await query.range(from, from + PAGE_SIZE - 1);
+    if (error) toast({ title: "Failed to load estimates", description: error.message, variant: "destructive" });
+    else { setEstimates((data ?? []) as Estimate[]); setTotal(count ?? 0); }
+    if (isInitial) setInitialLoading(false); else setPageLoading(false);
+  }, [debouncedSearch, statusFilter, page]);
+
+  useEffect(() => { if (page !== 1) setPage(1); /* eslint-disable-next-line */ }, [debouncedSearch, statusFilter]);
+  useEffect(() => { load(initialLoading); /* eslint-disable-next-line */ }, [load]);
+  useEffect(() => { loadAggregates(); }, [loadAggregates]);
 
   const openCreate = () => {
     setEditing(null);
@@ -97,14 +110,11 @@ const Estimates = () => {
   const openEdit = async (est: Estimate) => {
     setEditing(est);
     setForm({
-      title: est.title,
-      customer_name: est.customer_name ?? "",
-      valid_until: est.valid_until ?? "",
-      notes: est.notes ?? "",
+      title: est.title, customer_name: est.customer_name ?? "",
+      valid_until: est.valid_until ?? "", notes: est.notes ?? "",
       tax_rate: Number(est.tax_rate ?? 0),
     });
-    const { data: lines } = await supabase
-      .from("estimate_items").select("*").eq("estimate_id", est.id).order("position");
+    const { data: lines } = await supabase.from("estimate_items").select("*").eq("estimate_id", est.id).order("position");
     setItems(((lines ?? []) as any[]).map((l) => ({
       id: l.id, description: l.description, quantity: Number(l.quantity),
       unit_price: Number(l.unit_price), total: Number(l.total),
@@ -116,13 +126,10 @@ const Estimates = () => {
     await supabase.from("estimate_items").delete().eq("estimate_id", estimateId);
     if (items.length === 0) return;
     const rows = items.map((it, idx) => ({
-      estimate_id: estimateId,
-      organization_id,
+      estimate_id: estimateId, organization_id,
       description: it.description || "Item",
-      quantity: Number(it.quantity) || 0,
-      unit_price: Number(it.unit_price) || 0,
-      total: Number(it.total) || 0,
-      position: idx,
+      quantity: Number(it.quantity) || 0, unit_price: Number(it.unit_price) || 0,
+      total: Number(it.total) || 0, position: idx,
     }));
     const { error } = await supabase.from("estimate_items").insert(rows);
     if (error) throw error;
@@ -130,20 +137,17 @@ const Estimates = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.title.trim()) { toast({ title: "Title is required", variant: "destructive" }); return; }
-    if (!orgId) { toast({ title: "No organization found", variant: "destructive" }); return; }
+    if (!form.title.trim()) return toast({ title: "Title is required", variant: "destructive" });
+    if (!orgId) return toast({ title: "No organization found", variant: "destructive" });
     setSaving(true);
-
     const { grandTotal } = computeTotals(items, form.tax_rate);
     const payload = {
       title: form.title.trim(),
       customer_name: form.customer_name.trim() || null,
-      amount: grandTotal,
-      tax_rate: form.tax_rate,
+      amount: grandTotal, tax_rate: form.tax_rate,
       valid_until: form.valid_until || null,
       notes: form.notes.trim() || null,
     };
-
     try {
       let estimateId: string;
       if (editing) {
@@ -158,7 +162,7 @@ const Estimates = () => {
       await persistItems(estimateId, orgId);
       toast({ title: editing ? "Estimate updated" : "Estimate created" });
       setDialogOpen(false);
-      load();
+      load(false); loadAggregates();
     } catch (err: any) {
       toast({ title: "Save failed", description: err?.message ?? "Unknown error", variant: "destructive" });
     } finally {
@@ -170,46 +174,32 @@ const Estimates = () => {
     setActionPending(est.id);
     const { error } = await supabase.from("estimates").update({ status }).eq("id", est.id);
     setActionPending(null);
-    if (error) { toast({ title: "Update failed", description: error.message, variant: "destructive" }); return; }
+    if (error) return toast({ title: "Update failed", description: error.message, variant: "destructive" });
     toast({ title: `Estimate ${status.toLowerCase()}` });
-    load();
+    load(false); loadAggregates();
   };
 
   const convertToInvoice = async (est: Estimate) => {
     if (!orgId) return;
     setActionPending(est.id);
     try {
-      // Load line items
-      const { data: lines, error: linesErr } = await supabase
-        .from("estimate_items").select("*").eq("estimate_id", est.id).order("position");
+      const { data: lines, error: linesErr } = await supabase.from("estimate_items").select("*").eq("estimate_id", est.id).order("position");
       if (linesErr) throw linesErr;
       const itemRows = (lines ?? []) as any[];
-
-      // Create invoice
       const { data: inv, error: invErr } = await supabase.from("invoices").insert({
-        organization_id: orgId,
-        customer_name: est.customer_name,
-        amount: est.amount,
-        tax_rate: est.tax_rate,
-        status: "DRAFT",
+        organization_id: orgId, customer_name: est.customer_name,
+        amount: est.amount, tax_rate: est.tax_rate, status: "DRAFT",
       } as any).select("id").single();
       if (invErr || !inv) throw invErr;
-
-      // Copy line items
       if (itemRows.length > 0) {
         const invItems = itemRows.map((l, idx) => ({
-          invoice_id: inv.id,
-          organization_id: orgId,
-          description: l.description,
-          quantity: l.quantity,
-          unit_price: l.unit_price,
-          total: l.total,
-          position: idx,
+          invoice_id: inv.id, organization_id: orgId,
+          description: l.description, quantity: l.quantity,
+          unit_price: l.unit_price, total: l.total, position: idx,
         }));
         const { error } = await supabase.from("invoice_items").insert(invItems);
         if (error) throw error;
       }
-
       toast({ title: `Invoice drafted from #${est.estimate_number}` });
       navigate("/invoices");
     } catch (err: any) {
@@ -218,6 +208,10 @@ const Estimates = () => {
       setActionPending(null);
     }
   };
+
+  const isFiltered = debouncedSearch.trim().length > 0 || statusFilter !== "ALL";
+  const clearFilters = () => { setSearch(""); setStatusFilter("ALL"); };
+  const counts = aggregates.counts;
 
   return (
     <div className="space-y-6">
@@ -230,8 +224,8 @@ const Estimates = () => {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <KpiTile label="Approved" value={`$${totals.accepted.toLocaleString()}`} hint={`${counts.ACCEPTED ?? 0} won`} />
-        <KpiTile label="Outstanding" value={`$${totals.outstanding.toLocaleString()}`} hint={`${counts.SENT ?? 0} sent`} />
+        <KpiTile label="Approved" value={`$${aggregates.accepted.toLocaleString()}`} hint={`${counts.ACCEPTED ?? 0} won`} />
+        <KpiTile label="Outstanding" value={`$${aggregates.outstanding.toLocaleString()}`} hint={`${counts.SENT ?? 0} sent`} />
         <KpiTile label="Drafts" value={String(counts.DRAFT ?? 0)} hint="Not yet sent" />
       </div>
 
@@ -252,69 +246,75 @@ const Estimates = () => {
       </div>
 
       <div className="rounded-xl border border-border bg-card shadow-soft">
-        {loading ? (
+        {initialLoading ? (
           <div className="space-y-2 p-6">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="grid h-12 w-12 place-items-center rounded-full bg-accent text-accent-foreground"><FileText className="h-5 w-5" /></div>
-            <h2 className="mt-4 text-lg font-semibold">{estimates.length === 0 ? "No estimates yet" : "No estimates match"}</h2>
-            <p className="mt-2 text-sm text-muted-foreground">{estimates.length === 0 ? "Draft your first proposal." : "Try a different filter."}</p>
-            {estimates.length === 0 && <Button onClick={openCreate} className="mt-4 gap-2"><Plus className="h-4 w-4" /> New estimate</Button>}
-          </div>
+        ) : estimates.length === 0 ? (
+          <EmptyState
+            icon={<FileText className="h-5 w-5" />}
+            title="No estimates yet"
+            description="Draft your first proposal."
+            actionLabel="New estimate"
+            onAction={isFiltered ? clearFilters : openCreate}
+            filtered={isFiltered}
+            query={debouncedSearch}
+          />
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-20">#</TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Valid until</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead className="w-[230px] text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((est) => (
-                <TableRow key={est.id} className="cursor-pointer" onClick={() => openEdit(est)}>
-                  <TableCell className="font-mono text-xs text-muted-foreground">#{est.estimate_number}</TableCell>
-                  <TableCell className="font-medium">{est.title}</TableCell>
-                  <TableCell className="text-muted-foreground">{est.customer_name ?? "—"}</TableCell>
-                  <TableCell className="text-muted-foreground">{est.valid_until ? format(new Date(est.valid_until), "MMM d, yyyy") : "—"}</TableCell>
-                  <TableCell>
-                    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide", statusStyles[est.status])}>
-                      {est.status === "ACCEPTED" ? "APPROVED" : est.status}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm">${Number(est.amount).toLocaleString()}</TableCell>
-                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center justify-end gap-1">
-                      {est.status === "DRAFT" && (
-                        <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" disabled={actionPending === est.id} onClick={() => updateStatus(est, "SENT")}>
-                          <Send className="h-3 w-3" /> Send
-                        </Button>
-                      )}
-                      {est.status === "SENT" && (
-                        <>
-                          <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" disabled={actionPending === est.id} onClick={() => updateStatus(est, "ACCEPTED")}>
-                            <Check className="h-3 w-3" /> Approve
-                          </Button>
-                          <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs text-destructive hover:text-destructive" disabled={actionPending === est.id} onClick={() => updateStatus(est, "DECLINED")}>
-                            <X className="h-3 w-3" /> Decline
-                          </Button>
-                        </>
-                      )}
-                      {est.status === "ACCEPTED" && (
-                        <Button size="sm" className="h-7 gap-1 px-2 text-xs" disabled={actionPending === est.id} onClick={() => convertToInvoice(est)}>
-                          <ArrowRight className="h-3 w-3" /> Convert to Invoice
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-20">#</TableHead>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Valid until</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="w-[230px] text-right">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {estimates.map((est) => (
+                  <TableRow key={est.id} className="cursor-pointer" onClick={() => openEdit(est)}>
+                    <TableCell className="font-mono text-xs text-muted-foreground">#{est.estimate_number}</TableCell>
+                    <TableCell className="font-medium">{est.title}</TableCell>
+                    <TableCell className="text-muted-foreground">{est.customer_name ?? "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{est.valid_until ? format(new Date(est.valid_until), "MMM d, yyyy") : "—"}</TableCell>
+                    <TableCell>
+                      <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide", statusStyles[est.status])}>
+                        {est.status === "ACCEPTED" ? "APPROVED" : est.status}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm">${Number(est.amount).toLocaleString()}</TableCell>
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1">
+                        {est.status === "DRAFT" && (
+                          <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" disabled={actionPending === est.id} onClick={() => updateStatus(est, "SENT")}>
+                            <Send className="h-3 w-3" /> Send
+                          </Button>
+                        )}
+                        {est.status === "SENT" && (
+                          <>
+                            <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" disabled={actionPending === est.id} onClick={() => updateStatus(est, "ACCEPTED")}>
+                              <Check className="h-3 w-3" /> Approve
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs text-destructive hover:text-destructive" disabled={actionPending === est.id} onClick={() => updateStatus(est, "DECLINED")}>
+                              <X className="h-3 w-3" /> Decline
+                            </Button>
+                          </>
+                        )}
+                        {est.status === "ACCEPTED" && (
+                          <Button size="sm" className="h-7 gap-1 px-2 text-xs" disabled={actionPending === est.id} onClick={() => convertToInvoice(est)}>
+                            <ArrowRight className="h-3 w-3" /> Convert to Invoice
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <DataPagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} loading={pageLoading} />
+          </>
         )}
       </div>
 
@@ -337,8 +337,7 @@ const Estimates = () => {
             <div className="space-y-2">
               <Label>Line items</Label>
               <LineItemEditor
-                items={items}
-                onChange={setItems}
+                items={items} onChange={setItems}
                 taxRate={form.tax_rate}
                 onTaxRateChange={(n) => setForm({ ...form, tax_rate: n })}
               />

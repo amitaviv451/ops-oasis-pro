@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Search, Briefcase, Trash2, Receipt } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,6 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useDebounce } from "@/hooks/use-debounce";
+import { usePageParam } from "@/hooks/use-page-param";
+import { DataPagination, PAGE_SIZE } from "@/components/DataPagination";
+import { EmptyState } from "@/components/EmptyState";
 
 type JobStatus = "NEW" | "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 
@@ -39,30 +43,27 @@ const statusStyles: Record<JobStatus, string> = {
 };
 
 interface FormState {
-  title: string;
-  customer_name: string;
-  status: JobStatus;
-  scheduled_at: string;
-  estimated_cost: string;
-  actual_cost: string;
+  title: string; customer_name: string; status: JobStatus;
+  scheduled_at: string; estimated_cost: string; actual_cost: string;
 }
 
 const emptyForm: FormState = {
-  title: "",
-  customer_name: "",
-  status: "NEW",
-  scheduled_at: "",
-  estimated_cost: "",
-  actual_cost: "",
+  title: "", customer_name: "", status: "NEW",
+  scheduled_at: "", estimated_cost: "", actual_cost: "",
 };
 
 const Jobs = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [counts, setCounts] = useState<Record<string, number>>({ ALL: 0 });
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [pageLoading, setPageLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState<"ALL" | JobStatus>("ALL");
+  const [page, setPage] = usePageParam();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -73,105 +74,75 @@ const Jobs = () => {
   const createInvoiceFromJob = async (job: Job) => {
     if (!user) return;
     setInvoicingId(job.id);
-    const { data: profile } = await supabase
-      .from("profiles").select("organization_id").eq("id", user.id).single();
+    const { data: profile } = await supabase.from("profiles").select("organization_id").eq("id", user.id).single();
     if (!profile?.organization_id) {
       toast({ title: "No organization found", variant: "destructive" });
-      setInvoicingId(null);
-      return;
+      setInvoicingId(null); return;
     }
     const amount = job.actual_cost ?? job.estimated_cost ?? 0;
     const { error } = await supabase.from("invoices").insert({
-      organization_id: profile.organization_id,
-      customer_name: job.customer_name,
-      amount,
-      status: "DRAFT",
-      job_id: job.id,
+      organization_id: profile.organization_id, customer_name: job.customer_name,
+      amount, status: "DRAFT", job_id: job.id,
     } as any);
     setInvoicingId(null);
-    if (error) {
-      toast({ title: "Failed to create invoice", description: error.message, variant: "destructive" });
-      return;
-    }
+    if (error) { toast({ title: "Failed to create invoice", description: error.message, variant: "destructive" }); return; }
     toast({ title: `Invoice drafted for #${job.job_number}`, description: `$${Number(amount).toLocaleString()} — ${job.customer_name ?? "no customer"}` });
     navigate("/invoices");
   };
 
-  const loadJobs = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("jobs")
-      .select("*")
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false });
-    if (error) {
-      toast({ title: "Failed to load jobs", description: error.message, variant: "destructive" });
-    } else {
-      setJobs((data ?? []) as Job[]);
+  const loadCounts = useCallback(async () => {
+    const { data } = await supabase.from("jobs").select("status").is("deleted_at", null);
+    const c: Record<string, number> = { ALL: (data ?? []).length };
+    STATUSES.forEach((s) => (c[s] = 0));
+    (data ?? []).forEach((r: any) => (c[r.status] = (c[r.status] ?? 0) + 1));
+    setCounts(c);
+  }, []);
+
+  const loadJobs = useCallback(async (isInitial: boolean) => {
+    if (isInitial) setInitialLoading(true); else setPageLoading(true);
+    let query = supabase.from("jobs").select("*", { count: "exact" })
+      .is("deleted_at", null).order("created_at", { ascending: false });
+    if (statusFilter !== "ALL") query = query.eq("status", statusFilter);
+    const q = debouncedSearch.trim();
+    if (q) {
+      const num = Number(q);
+      const ors = [`title.ilike.%${q}%`, `customer_name.ilike.%${q}%`];
+      if (!isNaN(num)) ors.push(`job_number.eq.${num}`);
+      query = query.or(ors.join(","));
     }
-    setLoading(false);
-  };
+    const from = (page - 1) * PAGE_SIZE;
+    const { data, error, count } = await query.range(from, from + PAGE_SIZE - 1);
+    if (error) toast({ title: "Failed to load jobs", description: error.message, variant: "destructive" });
+    else { setJobs((data ?? []) as Job[]); setTotal(count ?? 0); }
+    if (isInitial) setInitialLoading(false); else setPageLoading(false);
+  }, [debouncedSearch, statusFilter, page]);
 
   const softDeleteJob = async () => {
     if (!deletingJob) return;
     setConfirmDeleting(true);
-    const { error } = await supabase
-      .from("jobs")
-      .update({ deleted_at: new Date().toISOString() } as any)
-      .eq("id", deletingJob.id);
+    const { error } = await supabase.from("jobs")
+      .update({ deleted_at: new Date().toISOString() } as any).eq("id", deletingJob.id);
     setConfirmDeleting(false);
-    if (error) {
-      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
-      return;
-    }
+    if (error) { toast({ title: "Delete failed", description: error.message, variant: "destructive" }); return; }
     toast({ title: `Job #${deletingJob.job_number} deleted` });
     setDeletingJob(null);
-    loadJobs();
+    loadJobs(false);
+    loadCounts();
   };
 
-  useEffect(() => {
-    loadJobs();
-  }, []);
+  useEffect(() => { if (page !== 1) setPage(1); /* eslint-disable-next-line */ }, [debouncedSearch, statusFilter]);
+  useEffect(() => { loadJobs(initialLoading); /* eslint-disable-next-line */ }, [loadJobs]);
+  useEffect(() => { loadCounts(); }, [loadCounts]);
 
-  const filtered = useMemo(() => {
-    return jobs.filter((j) => {
-      if (statusFilter !== "ALL" && j.status !== statusFilter) return false;
-      if (!search.trim()) return true;
-      const q = search.toLowerCase();
-      return (
-        j.title.toLowerCase().includes(q) ||
-        (j.customer_name ?? "").toLowerCase().includes(q) ||
-        String(j.job_number).includes(q)
-      );
-    });
-  }, [jobs, search, statusFilter]);
-
-  const openCreate = () => {
-    setForm(emptyForm);
-    setDialogOpen(true);
-  };
+  const openCreate = () => { setForm(emptyForm); setDialogOpen(true); };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.title.trim()) {
-      toast({ title: "Title is required", variant: "destructive" });
-      return;
-    }
+    if (!form.title.trim()) return toast({ title: "Title is required", variant: "destructive" });
     if (!user) return;
     setSaving(true);
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("organization_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile?.organization_id) {
-      toast({ title: "No organization found", variant: "destructive" });
-      setSaving(false);
-      return;
-    }
-
+    const { data: profile } = await supabase.from("profiles").select("organization_id").eq("id", user.id).single();
+    if (!profile?.organization_id) { toast({ title: "No organization found", variant: "destructive" }); setSaving(false); return; }
     const payload = {
       title: form.title.trim(),
       customer_name: form.customer_name.trim() || null,
@@ -180,27 +151,17 @@ const Jobs = () => {
       estimated_cost: form.estimated_cost ? Number(form.estimated_cost) : null,
       actual_cost: form.actual_cost ? Number(form.actual_cost) : null,
     };
-
-    const { error } = await supabase
-      .from("jobs")
-      .insert({ ...payload, organization_id: profile.organization_id });
-
+    const { error } = await supabase.from("jobs").insert({ ...payload, organization_id: profile.organization_id });
     setSaving(false);
-    if (error) {
-      toast({ title: "Save failed", description: error.message, variant: "destructive" });
-      return;
-    }
+    if (error) return toast({ title: "Save failed", description: error.message, variant: "destructive" });
     toast({ title: "Job created" });
     setDialogOpen(false);
-    loadJobs();
+    loadJobs(false);
+    loadCounts();
   };
 
-  const counts = useMemo(() => {
-    const c: Record<string, number> = { ALL: jobs.length };
-    STATUSES.forEach((s) => (c[s] = 0));
-    jobs.forEach((j) => (c[j.status] = (c[j.status] ?? 0) + 1));
-    return c;
-  }, [jobs]);
+  const isFiltered = debouncedSearch.trim().length > 0 || statusFilter !== "ALL";
+  const clearFilters = () => { setSearch(""); setStatusFilter("ALL"); };
 
   return (
     <div className="space-y-6">
@@ -209,160 +170,108 @@ const Jobs = () => {
           <h1 className="text-2xl font-bold tracking-tight">Jobs</h1>
           <p className="text-sm text-muted-foreground">Track every job from new to completed.</p>
         </div>
-        <Button onClick={openCreate} className="gap-2">
-          <Plus className="h-4 w-4" /> New job
-        </Button>
+        <Button onClick={openCreate} className="gap-2"><Plus className="h-4 w-4" /> New job</Button>
       </div>
 
-      {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[220px] max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by job, customer, or #"
-            className="pl-9"
-          />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by job, customer, or #" className="pl-9" />
         </div>
         <div className="flex flex-wrap gap-1.5">
           {(["ALL", ...STATUSES] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setStatusFilter(s)}
-              className={cn(
-                "rounded-full border border-border px-3 py-1 text-xs font-medium transition-colors",
-                statusFilter === s
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-card text-muted-foreground hover:text-foreground",
-              )}
-            >
+            <button key={s} type="button" onClick={() => setStatusFilter(s)}
+              className={cn("rounded-full border border-border px-3 py-1 text-xs font-medium transition-colors",
+                statusFilter === s ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground hover:text-foreground")}>
               {s === "ALL" ? "All" : s.replace("_", " ")} <span className="ml-1 opacity-60">{counts[s] ?? 0}</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Table */}
       <div className="rounded-xl border border-border bg-card shadow-soft">
-        {loading ? (
-          <div className="space-y-2 p-6">
-            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="grid h-12 w-12 place-items-center rounded-full bg-accent text-accent-foreground">
-              <Briefcase className="h-5 w-5" />
-            </div>
-            <h2 className="mt-4 text-lg font-semibold">
-              {jobs.length === 0 ? "No jobs yet" : "No jobs match your filters"}
-            </h2>
-            <p className="mt-2 max-w-md text-sm text-muted-foreground">
-              {jobs.length === 0
-                ? "Create your first job to start tracking work."
-                : "Try a different search term or status."}
-            </p>
-            {jobs.length === 0 && (
-              <Button onClick={openCreate} className="mt-4 gap-2">
-                <Plus className="h-4 w-4" /> New job
-              </Button>
-            )}
-          </div>
+        {initialLoading ? (
+          <div className="space-y-2 p-6">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
+        ) : jobs.length === 0 ? (
+          <EmptyState
+            icon={<Briefcase className="h-5 w-5" />}
+            title="No jobs yet"
+            description="Create your first job to start tracking work."
+            actionLabel="New job"
+            onAction={isFiltered ? clearFilters : openCreate}
+            filtered={isFiltered}
+            query={debouncedSearch}
+          />
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-20">#</TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Scheduled</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Estimated</TableHead>
-                <TableHead className="w-32 text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((job) => (
-                <TableRow key={job.id} className="cursor-pointer" onClick={() => navigate(`/jobs/${job.id}`)}>
-                  <TableCell className="font-mono text-xs text-muted-foreground">#{job.job_number}</TableCell>
-                  <TableCell className="font-medium">{job.title}</TableCell>
-                  <TableCell className="text-muted-foreground">{job.customer_name ?? "—"}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {job.scheduled_at
-                      ? new Date(job.scheduled_at).toLocaleString("en", {
-                          month: "short",
-                          day: "numeric",
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })
-                      : "—"}
-                  </TableCell>
-                  <TableCell>
-                    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide", statusStyles[job.status])}>
-                      {job.status.replace("_", " ")}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm">
-                    {job.estimated_cost != null ? `$${Number(job.estimated_cost).toLocaleString()}` : "—"}
-                  </TableCell>
-                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center justify-end gap-1">
-                      {job.status === "COMPLETED" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 gap-1.5 px-2 text-xs"
-                          disabled={invoicingId === job.id}
-                          onClick={() => createInvoiceFromJob(job)}
-                        >
-                          <Receipt className="h-3.5 w-3.5" />
-                          {invoicingId === job.id ? "..." : "Invoice"}
-                        </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                        onClick={() => setDeletingJob(job)}
-                        aria-label={`Delete job #${job.job_number}`}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </TableCell>
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-20">#</TableHead>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Scheduled</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Estimated</TableHead>
+                  <TableHead className="w-32 text-right">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {jobs.map((job) => (
+                  <TableRow key={job.id} className="cursor-pointer" onClick={() => navigate(`/jobs/${job.id}`)}>
+                    <TableCell className="font-mono text-xs text-muted-foreground">#{job.job_number}</TableCell>
+                    <TableCell className="font-medium">{job.title}</TableCell>
+                    <TableCell className="text-muted-foreground">{job.customer_name ?? "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {job.scheduled_at
+                        ? new Date(job.scheduled_at).toLocaleString("en", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+                        : "—"}
+                    </TableCell>
+                    <TableCell>
+                      <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide", statusStyles[job.status])}>
+                        {job.status.replace("_", " ")}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                      {job.estimated_cost != null ? `$${Number(job.estimated_cost).toLocaleString()}` : "—"}
+                    </TableCell>
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1">
+                        {job.status === "COMPLETED" && (
+                          <Button size="sm" variant="outline" className="h-7 gap-1.5 px-2 text-xs"
+                            disabled={invoicingId === job.id} onClick={() => createInvoiceFromJob(job)}>
+                            <Receipt className="h-3.5 w-3.5" />
+                            {invoicingId === job.id ? "..." : "Invoice"}
+                          </Button>
+                        )}
+                        <Button size="sm" variant="ghost"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => setDeletingJob(job)} aria-label={`Delete job #${job.job_number}`}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <DataPagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} loading={pageLoading} />
+          </>
         )}
       </div>
 
-      {/* Create / edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-[520px]">
-          <DialogHeader>
-            <DialogTitle>New job</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>New job</DialogTitle></DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="title">Title *</Label>
-              <Input
-                id="title"
-                value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="e.g. Replace water heater"
-                autoFocus
-              />
+              <Input id="title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Replace water heater" autoFocus />
             </div>
             <div className="space-y-2">
               <Label htmlFor="customer">Customer</Label>
-              <Input
-                id="customer"
-                value={form.customer_name}
-                onChange={(e) => setForm({ ...form, customer_name: e.target.value })}
-                placeholder="Customer name"
-              />
+              <Input id="customer" value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} placeholder="Customer name" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
@@ -370,72 +279,43 @@ const Jobs = () => {
                 <Select value={form.status} onValueChange={(v: JobStatus) => setForm({ ...form, status: v })}>
                   <SelectTrigger id="status"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {STATUSES.map((s) => (
-                      <SelectItem key={s} value={s}>{s.replace("_", " ")}</SelectItem>
-                    ))}
+                    {STATUSES.map((s) => (<SelectItem key={s} value={s}>{s.replace("_", " ")}</SelectItem>))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="scheduled">Scheduled at</Label>
-                <Input
-                  id="scheduled"
-                  type="datetime-local"
-                  value={form.scheduled_at}
-                  onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })}
-                />
+                <Input id="scheduled" type="datetime-local" value={form.scheduled_at} onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="estimated">Estimated ($)</Label>
-                <Input
-                  id="estimated"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.estimated_cost}
-                  onChange={(e) => setForm({ ...form, estimated_cost: e.target.value })}
-                />
+                <Input id="estimated" type="number" min="0" step="0.01" value={form.estimated_cost} onChange={(e) => setForm({ ...form, estimated_cost: e.target.value })} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="actual">Actual ($)</Label>
-                <Input
-                  id="actual"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.actual_cost}
-                  onChange={(e) => setForm({ ...form, actual_cost: e.target.value })}
-                />
+                <Input id="actual" type="number" min="0" step="0.01" value={form.actual_cost} onChange={(e) => setForm({ ...form, actual_cost: e.target.value })} />
               </div>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={saving}>
-                {saving ? "Saving..." : "Create job"}
-              </Button>
+              <Button type="submit" disabled={saving}>{saving ? "Saving..." : "Create job"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Soft-delete confirm */}
       <AlertDialog open={!!deletingJob} onOpenChange={(o) => !o && setDeletingJob(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete job{deletingJob ? ` #${deletingJob.job_number}` : ""}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will hide the job from all lists. You can recover it from the database if needed.
-            </AlertDialogDescription>
+            <AlertDialogDescription>This will hide the job from all lists. You can recover it from the database if needed.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={softDeleteJob}
-              disabled={confirmDeleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
+            <AlertDialogAction onClick={softDeleteJob} disabled={confirmDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               {confirmDeleting ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>

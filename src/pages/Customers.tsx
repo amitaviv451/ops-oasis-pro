@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Plus, Search, Users, Pencil, Mail, Phone, MapPin } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrgId } from "@/lib/useOrgId";
@@ -10,6 +10,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/hooks/use-toast";
+import { useDebounce } from "@/hooks/use-debounce";
+import { usePageParam } from "@/hooks/use-page-param";
+import { DataPagination, PAGE_SIZE } from "@/components/DataPagination";
+import { EmptyState } from "@/components/EmptyState";
 
 interface Customer {
   id: string;
@@ -26,27 +30,33 @@ const empty = { name: "", email: "", phone: "", address: "", notes: "" };
 const Customers = () => {
   const orgId = useOrgId();
   const [items, setItems] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [pageLoading, setPageLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
+  const [page, setPage] = usePageParam();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Customer | null>(null);
   const [form, setForm] = useState(empty);
   const [saving, setSaving] = useState(false);
 
-  const load = async () => {
-    setLoading(true);
-    const { data, error } = await supabase.from("customers").select("*").order("created_at", { ascending: false });
+  const load = useCallback(async (isInitial: boolean) => {
+    if (isInitial) setInitialLoading(true); else setPageLoading(true);
+    let query = supabase.from("customers").select("*", { count: "exact" }).order("created_at", { ascending: false });
+    const q = debouncedSearch.trim();
+    if (q) query = query.or(`name.ilike.%${q}%,email.ilike.%${q}%,phone.ilike.%${q}%`);
+    const from = (page - 1) * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    const { data, error, count } = await query.range(from, to);
     if (error) toast({ title: "Failed to load", description: error.message, variant: "destructive" });
-    else setItems((data ?? []) as Customer[]);
-    setLoading(false);
-  };
-  useEffect(() => { load(); }, []);
+    else { setItems((data ?? []) as Customer[]); setTotal(count ?? 0); }
+    if (isInitial) setInitialLoading(false); else setPageLoading(false);
+  }, [debouncedSearch, page]);
 
-  const filtered = useMemo(() => items.filter((c) => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return c.name.toLowerCase().includes(q) || (c.email ?? "").toLowerCase().includes(q) || (c.phone ?? "").includes(q);
-  }), [items, search]);
+  // Reset to page 1 when search changes
+  useEffect(() => { if (page !== 1) setPage(1); /* eslint-disable-next-line */ }, [debouncedSearch]);
+  useEffect(() => { load(items.length === 0 && total === 0); /* eslint-disable-next-line */ }, [load]);
 
   const openNew = () => { setEditing(null); setForm(empty); setOpen(true); };
   const openEdit = (c: Customer) => {
@@ -74,8 +84,10 @@ const Customers = () => {
     if (error) return toast({ title: "Save failed", description: error.message, variant: "destructive" });
     toast({ title: editing ? "Customer updated" : "Customer added" });
     setOpen(false);
-    load();
+    load(false);
   };
+
+  const isFiltered = debouncedSearch.trim().length > 0;
 
   return (
     <div className="space-y-6">
@@ -93,32 +105,38 @@ const Customers = () => {
       </div>
 
       <div className="rounded-xl border border-border bg-card shadow-soft">
-        {loading ? (
+        {initialLoading ? (
           <div className="space-y-2 p-6">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="grid h-12 w-12 place-items-center rounded-full bg-accent text-accent-foreground"><Users className="h-5 w-5" /></div>
-            <h2 className="mt-4 text-lg font-semibold">{items.length === 0 ? "No customers yet" : "No matches"}</h2>
-            <p className="mt-2 text-sm text-muted-foreground">{items.length === 0 ? "Add your first customer to get started." : "Try a different search."}</p>
-            {items.length === 0 && <Button onClick={openNew} className="mt-4 gap-2"><Plus className="h-4 w-4" /> New customer</Button>}
-          </div>
+        ) : items.length === 0 ? (
+          <EmptyState
+            icon={<Users className="h-5 w-5" />}
+            title="No customers yet"
+            description="Add your first customer to get started."
+            actionLabel="New customer"
+            onAction={isFiltered ? () => setSearch("") : openNew}
+            filtered={isFiltered}
+            query={debouncedSearch}
+          />
         ) : (
-          <Table>
-            <TableHeader><TableRow>
-              <TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Phone</TableHead><TableHead>Address</TableHead><TableHead className="w-12"></TableHead>
-            </TableRow></TableHeader>
-            <TableBody>
-              {filtered.map((c) => (
-                <TableRow key={c.id} className="cursor-pointer" onClick={() => openEdit(c)}>
-                  <TableCell className="font-medium">{c.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.email ? <span className="inline-flex items-center gap-1"><Mail className="h-3 w-3" />{c.email}</span> : "—"}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.phone ? <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3" />{c.phone}</span> : "—"}</TableCell>
-                  <TableCell className="max-w-[260px] truncate text-muted-foreground">{c.address ? <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />{c.address}</span> : "—"}</TableCell>
-                  <TableCell><Pencil className="h-3.5 w-3.5 text-muted-foreground" /></TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <>
+            <Table>
+              <TableHeader><TableRow>
+                <TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Phone</TableHead><TableHead>Address</TableHead><TableHead className="w-12"></TableHead>
+              </TableRow></TableHeader>
+              <TableBody>
+                {items.map((c) => (
+                  <TableRow key={c.id} className="cursor-pointer" onClick={() => openEdit(c)}>
+                    <TableCell className="font-medium">{c.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{c.email ? <span className="inline-flex items-center gap-1"><Mail className="h-3 w-3" />{c.email}</span> : "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{c.phone ? <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3" />{c.phone}</span> : "—"}</TableCell>
+                    <TableCell className="max-w-[260px] truncate text-muted-foreground">{c.address ? <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />{c.address}</span> : "—"}</TableCell>
+                    <TableCell><Pencil className="h-3.5 w-3.5 text-muted-foreground" /></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <DataPagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} loading={pageLoading} />
+          </>
         )}
       </div>
 
