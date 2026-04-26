@@ -55,6 +55,57 @@ export type Database = {
           },
         ]
       }
+      estimate_items: {
+        Row: {
+          created_at: string
+          description: string
+          estimate_id: string
+          id: string
+          organization_id: string
+          position: number
+          quantity: number
+          total: number
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          estimate_id: string
+          id?: string
+          organization_id: string
+          position?: number
+          quantity?: number
+          total?: number
+          unit_price?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          estimate_id?: string
+          id?: string
+          organization_id?: string
+          position?: number
+          quantity?: number
+          total?: number
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_items_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_items_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       estimates: {
         Row: {
           amount: number
@@ -65,6 +116,7 @@ export type Database = {
           notes: string | null
           organization_id: string
           status: Database["public"]["Enums"]["estimate_status"]
+          tax_rate: number
           title: string
           valid_until: string | null
         }
@@ -77,6 +129,7 @@ export type Database = {
           notes?: string | null
           organization_id: string
           status?: Database["public"]["Enums"]["estimate_status"]
+          tax_rate?: number
           title: string
           valid_until?: string | null
         }
@@ -89,6 +142,7 @@ export type Database = {
           notes?: string | null
           organization_id?: string
           status?: Database["public"]["Enums"]["estimate_status"]
+          tax_rate?: number
           title?: string
           valid_until?: string | null
         }
@@ -146,36 +200,96 @@ export type Database = {
           },
         ]
       }
+      invoice_items: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          invoice_id: string
+          organization_id: string
+          position: number
+          quantity: number
+          total: number
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          id?: string
+          invoice_id: string
+          organization_id: string
+          position?: number
+          quantity?: number
+          total?: number
+          unit_price?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          invoice_id?: string
+          organization_id?: string
+          position?: number
+          quantity?: number
+          total?: number
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_items_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoices: {
         Row: {
           amount: number
           customer_name: string | null
+          due_date: string | null
           id: string
           issued_at: string
           job_id: string | null
           organization_id: string
           paid_at: string | null
+          payment_amount: number | null
           status: Database["public"]["Enums"]["invoice_status"]
+          tax_rate: number
         }
         Insert: {
           amount?: number
           customer_name?: string | null
+          due_date?: string | null
           id?: string
           issued_at?: string
           job_id?: string | null
           organization_id: string
           paid_at?: string | null
+          payment_amount?: number | null
           status?: Database["public"]["Enums"]["invoice_status"]
+          tax_rate?: number
         }
         Update: {
           amount?: number
           customer_name?: string | null
+          due_date?: string | null
           id?: string
           issued_at?: string
           job_id?: string | null
           organization_id?: string
           paid_at?: string | null
+          payment_amount?: number | null
           status?: Database["public"]["Enums"]["invoice_status"]
+          tax_rate?: number
         }
         Relationships: [
           {
