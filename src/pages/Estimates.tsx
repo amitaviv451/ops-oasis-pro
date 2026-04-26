@@ -44,7 +44,7 @@ const statusStyles: Record<EstimateStatus, string> = {
   SENT: "bg-accent text-accent-foreground",
   ACCEPTED: "bg-success/15 text-success",
   DECLINED: "bg-destructive/10 text-destructive",
-  EXPIRED: "bg-warning/15 text-warning",
+  EXPIRED: "bg-destructive/10 text-destructive",
 };
 
 const Estimates = () => {
