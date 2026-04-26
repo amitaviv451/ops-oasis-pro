@@ -311,6 +311,23 @@ const JobCard = ({
             <Button onClick={saveNote} disabled={!note.trim() || savingNote} variant="outline" className="h-12 w-full gap-2">
               <Plus className="h-4 w-4" /> {savingNote ? "Saving..." : "Add note"}
             </Button>
+            {notesLoading ? (
+              <Skeleton className="h-12 w-full" />
+            ) : notes.length > 0 ? (
+              <ul className="space-y-2 pt-2">
+                {notes.map((n) => (
+                  <li key={n.id} className="rounded-lg border border-border bg-card p-3">
+                    <div className="text-sm whitespace-pre-wrap">{n.body}</div>
+                    <div className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                      {format(new Date(n.created_at), "MMM d, h:mm a")}
+                      {n.user_email ? ` · ${n.user_email}` : ""}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="pt-1 text-xs text-muted-foreground">No notes yet.</p>
+            )}
           </div>
 
           {job.status === "SCHEDULED" || job.status === "NEW" ? (
