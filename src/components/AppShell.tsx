@@ -1,12 +1,13 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import {
   LayoutDashboard, UserPlus, Briefcase, CalendarRange, Users, FileText, Receipt,
   UsersRound, BookOpen, Package, MessageSquare, BarChart3, MapPin, Settings, Zap,
-  ChevronLeft, ChevronRight, LogOut,
+  ChevronLeft, ChevronRight, LogOut, Smartphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
+import { useUserRole } from "@/lib/useUserRole";
 import { Button } from "@/components/ui/button";
 
 const nav = [
@@ -29,6 +30,8 @@ const nav = [
 export const AppShell = ({ children }: { children: React.ReactNode }) => {
   const [collapsed, setCollapsed] = useState(false);
   const { user, signOut } = useAuth();
+  const { role } = useUserRole();
+  const navigate = useNavigate();
 
   return (
     <div className="flex min-h-screen w-full bg-secondary/40">
@@ -72,7 +75,20 @@ export const AppShell = ({ children }: { children: React.ReactNode }) => {
           ))}
         </nav>
 
-        <div className="border-t border-sidebar-border p-2">
+        <div className="border-t border-sidebar-border p-2 space-y-1">
+          {role === "TECHNICIAN" && (
+            <button
+              onClick={() => navigate("/field")}
+              className={cn(
+                "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+                collapsed && "justify-center px-0"
+              )}
+              title={collapsed ? "Field view" : undefined}
+            >
+              <Smartphone className="h-4 w-4 shrink-0" />
+              {!collapsed && <span>Switch to field view</span>}
+            </button>
+          )}
           <button
             onClick={() => setCollapsed(!collapsed)}
             className="flex w-full items-center justify-center rounded-md p-2 text-sidebar-foreground hover:bg-sidebar-accent/60"

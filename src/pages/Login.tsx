@@ -29,11 +29,17 @@ const Login = () => {
       return;
     }
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error || !data.user) {
+      setLoading(false);
+      return toast.error(error?.message ?? "Sign in failed");
+    }
+    const { data: roleRow } = await supabase
+      .from("user_roles").select("role").eq("user_id", data.user.id).limit(1).maybeSingle();
     setLoading(false);
-    if (error) return toast.error(error.message);
     toast.success("Welcome back");
-    navigate("/dashboard");
+    const isTechMobile = roleRow?.role === "TECHNICIAN" && window.innerWidth < 768;
+    navigate(isTechMobile ? "/field" : "/dashboard");
   };
 
   const handleGoogle = async () => {

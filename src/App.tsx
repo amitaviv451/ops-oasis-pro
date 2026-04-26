@@ -28,6 +28,7 @@ import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import PortalInvoice from "./pages/PortalInvoice";
 import PortalEstimate from "./pages/PortalEstimate";
+import FieldView from "./pages/FieldView";
 
 const queryClient = new QueryClient();
 
@@ -63,6 +64,7 @@ const App = () => (
               <Route path="/register" element={<Register />} />
               <Route path="/portal/invoice/:token" element={<PortalInvoice />} />
               <Route path="/portal/estimate/:token" element={<PortalEstimate />} />
+              <Route path="/field" element={<ProtectedRoute><FieldView /></ProtectedRoute>} />
               {protectedRoutes.map((r) => (
                 <Route
                   key={r.path}
