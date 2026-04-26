@@ -413,12 +413,34 @@ const Jobs = () => {
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={saving}>
-                {saving ? "Saving..." : editing ? "Save changes" : "Create job"}
+                {saving ? "Saving..." : "Create job"}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Soft-delete confirm */}
+      <AlertDialog open={!!deletingJob} onOpenChange={(o) => !o && setDeletingJob(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete job{deletingJob ? ` #${deletingJob.job_number}` : ""}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will hide the job from all lists. You can recover it from the database if needed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={softDeleteJob}
+              disabled={confirmDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {confirmDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
