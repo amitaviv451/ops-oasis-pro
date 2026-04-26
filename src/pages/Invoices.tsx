@@ -25,6 +25,7 @@ const STATUSES: Status[] = ["DRAFT", "SENT", "PAID", "OVERDUE"];
 
 interface Invoice {
   id: string;
+  invoice_number: number;
   customer_name: string | null;
   amount: number;
   status: Status;
