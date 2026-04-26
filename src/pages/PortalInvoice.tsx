@@ -71,7 +71,7 @@ const PortalInvoice = () => {
     if (!invoice) return;
     await downloadInvoicePdf({
       companyName: orgName,
-      invoiceNumber: invoice.id.slice(0, 8).toUpperCase(),
+      invoiceNumber: `INV-${invoice.invoice_number}`,
       customerName: invoice.customer_name ?? "—",
       issueDate: format(new Date(invoice.issued_at), "MMM d, yyyy"),
       dueDate: invoice.due_date ? format(new Date(invoice.due_date), "MMM d, yyyy") : undefined,
