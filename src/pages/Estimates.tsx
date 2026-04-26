@@ -289,7 +289,7 @@ const Estimates = () => {
                     <TableCell className="text-right font-mono text-sm">${Number(est.amount).toLocaleString()}</TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
-                        <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={() => copyPortalLink("estimate", est.portal_token)}>
+                        <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={() => copyPortalLink("estimate", est.portal_token, est.id)}>
                           <Share2 className="h-3 w-3" /> Share
                         </Button>
                         {est.status === "DRAFT" && (
