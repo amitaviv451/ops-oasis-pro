@@ -9,6 +9,7 @@ import { downloadInvoicePdf } from "@/lib/invoicePdf";
 
 interface Invoice {
   id: string;
+  invoice_number: number;
   customer_name: string | null;
   amount: number;
   status: "DRAFT" | "SENT" | "PAID" | "OVERDUE";
