@@ -290,13 +290,17 @@ export type Database = {
           customer_name: string | null
           deleted_at: string | null
           estimated_cost: number | null
+          estimated_duration_minutes: number | null
           id: string
           job_number: number
           organization_id: string
           priority: string
           scheduled_at: string | null
+          scheduled_end: string | null
+          scheduled_start: string | null
           service_type: string | null
           status: Database["public"]["Enums"]["job_status"]
+          technician_id: string | null
           title: string
         }
         Insert: {
@@ -307,13 +311,17 @@ export type Database = {
           customer_name?: string | null
           deleted_at?: string | null
           estimated_cost?: number | null
+          estimated_duration_minutes?: number | null
           id?: string
           job_number?: number
           organization_id: string
           priority?: string
           scheduled_at?: string | null
+          scheduled_end?: string | null
+          scheduled_start?: string | null
           service_type?: string | null
           status?: Database["public"]["Enums"]["job_status"]
+          technician_id?: string | null
           title: string
         }
         Update: {
@@ -324,13 +332,17 @@ export type Database = {
           customer_name?: string | null
           deleted_at?: string | null
           estimated_cost?: number | null
+          estimated_duration_minutes?: number | null
           id?: string
           job_number?: number
           organization_id?: string
           priority?: string
           scheduled_at?: string | null
+          scheduled_end?: string | null
+          scheduled_start?: string | null
           service_type?: string | null
           status?: Database["public"]["Enums"]["job_status"]
+          technician_id?: string | null
           title?: string
         }
         Relationships: [
@@ -339,6 +351,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_technician_id_fkey"
+            columns: ["technician_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
