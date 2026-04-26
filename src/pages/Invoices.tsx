@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Search, Receipt, Pencil } from "lucide-react";
+import { Plus, Search, Receipt, Download, CheckCircle } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrgId } from "@/lib/useOrgId";
@@ -12,6 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { LineItemEditor, LineItem, blankItem, computeTotals } from "@/components/LineItemEditor";
+import { downloadInvoicePdf } from "@/lib/invoicePdf";
 
 type Status = "DRAFT" | "SENT" | "PAID" | "OVERDUE";
 const STATUSES: Status[] = ["DRAFT", "SENT", "PAID", "OVERDUE"];
@@ -23,6 +25,10 @@ interface Invoice {
   status: Status;
   issued_at: string;
   paid_at: string | null;
+  payment_amount: number | null;
+  due_date: string | null;
+  tax_rate: number;
+  organization_id: string;
 }
 
 const styles: Record<Status, string> = {
@@ -32,8 +38,6 @@ const styles: Record<Status, string> = {
   OVERDUE: "bg-destructive/10 text-destructive",
 };
 
-const empty = { customer_name: "", amount: "", status: "DRAFT" as Status };
-
 const Invoices = () => {
   const orgId = useOrgId();
   const [items, setItems] = useState<Invoice[]>([]);
@@ -42,8 +46,14 @@ const Invoices = () => {
   const [filter, setFilter] = useState<"ALL" | Status>("ALL");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Invoice | null>(null);
-  const [form, setForm] = useState(empty);
   const [saving, setSaving] = useState(false);
+  const [actionPending, setActionPending] = useState<string | null>(null);
+  const [orgName, setOrgName] = useState("Your Company");
+
+  const [form, setForm] = useState({
+    customer_name: "", status: "DRAFT" as Status, due_date: "", tax_rate: 0,
+  });
+  const [lines, setLines] = useState<LineItem[]>([blankItem()]);
 
   const load = async () => {
     setLoading(true);
@@ -52,7 +62,14 @@ const Invoices = () => {
     else setItems((data ?? []) as Invoice[]);
     setLoading(false);
   };
+
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (!orgId) return;
+    supabase.from("organizations").select("name").eq("id", orgId).single()
+      .then(({ data }) => { if (data?.name) setOrgName(data.name); });
+  }, [orgId]);
 
   const filtered = useMemo(() => items.filter((i) => {
     if (filter !== "ALL" && i.status !== filter) return false;
@@ -66,31 +83,124 @@ const Invoices = () => {
     overdue: items.filter((i) => i.status === "OVERDUE").reduce((s, i) => s + Number(i.amount), 0),
   }), [items]);
 
-  const openNew = () => { setEditing(null); setForm(empty); setOpen(true); };
-  const openEdit = (i: Invoice) => {
-    setEditing(i);
-    setForm({ customer_name: i.customer_name ?? "", amount: String(i.amount), status: i.status });
+  const openNew = () => {
+    setEditing(null);
+    setForm({ customer_name: "", status: "DRAFT", due_date: "", tax_rate: 0 });
+    setLines([blankItem()]);
     setOpen(true);
+  };
+
+  const openEdit = async (i: Invoice) => {
+    setEditing(i);
+    setForm({
+      customer_name: i.customer_name ?? "",
+      status: i.status,
+      due_date: i.due_date ?? "",
+      tax_rate: Number(i.tax_rate ?? 0),
+    });
+    const { data } = await supabase.from("invoice_items").select("*").eq("invoice_id", i.id).order("position");
+    setLines(((data ?? []) as any[]).map((l) => ({
+      id: l.id, description: l.description, quantity: Number(l.quantity),
+      unit_price: Number(l.unit_price), total: Number(l.total),
+    })));
+    setOpen(true);
+  };
+
+  const persistItems = async (invoiceId: string, organization_id: string) => {
+    await supabase.from("invoice_items").delete().eq("invoice_id", invoiceId);
+    if (lines.length === 0) return;
+    const rows = lines.map((it, idx) => ({
+      invoice_id: invoiceId,
+      organization_id,
+      description: it.description || "Item",
+      quantity: Number(it.quantity) || 0,
+      unit_price: Number(it.unit_price) || 0,
+      total: Number(it.total) || 0,
+      position: idx,
+    }));
+    const { error } = await supabase.from("invoice_items").insert(rows);
+    if (error) throw error;
   };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!orgId) return;
     setSaving(true);
-    const payload = {
+    const { grandTotal } = computeTotals(lines, form.tax_rate);
+    const payload: any = {
       customer_name: form.customer_name.trim() || null,
-      amount: form.amount ? Number(form.amount) : 0,
+      amount: grandTotal,
       status: form.status,
+      tax_rate: form.tax_rate,
+      due_date: form.due_date || null,
       paid_at: form.status === "PAID" ? new Date().toISOString() : null,
     };
-    const { error } = editing
-      ? await supabase.from("invoices").update(payload).eq("id", editing.id)
-      : await supabase.from("invoices").insert({ ...payload, organization_id: orgId });
-    setSaving(false);
-    if (error) return toast({ title: "Save failed", description: error.message, variant: "destructive" });
-    toast({ title: editing ? "Invoice updated" : "Invoice created" });
-    setOpen(false);
+    try {
+      let invoiceId: string;
+      if (editing) {
+        const { error } = await supabase.from("invoices").update(payload).eq("id", editing.id);
+        if (error) throw error;
+        invoiceId = editing.id;
+      } else {
+        const { data, error } = await supabase.from("invoices").insert({ ...payload, organization_id: orgId }).select("id").single();
+        if (error || !data) throw error;
+        invoiceId = data.id;
+      }
+      await persistItems(invoiceId, orgId);
+      toast({ title: editing ? "Invoice updated" : "Invoice created" });
+      setOpen(false);
+      load();
+    } catch (err: any) {
+      toast({ title: "Save failed", description: err?.message ?? "Unknown error", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const markPaid = async (inv: Invoice) => {
+    setActionPending(inv.id);
+    const { error } = await supabase.from("invoices").update({
+      status: "PAID",
+      paid_at: new Date().toISOString(),
+      payment_amount: inv.amount,
+    } as any).eq("id", inv.id);
+    setActionPending(null);
+    if (error) { toast({ title: "Update failed", description: error.message, variant: "destructive" }); return; }
+    toast({ title: "Marked as paid" });
     load();
+  };
+
+  const downloadPdf = async (inv: Invoice) => {
+    setActionPending(inv.id);
+    try {
+      const { data: rows } = await supabase.from("invoice_items").select("*").eq("invoice_id", inv.id).order("position");
+      const itemRows = ((rows ?? []) as any[]).map((l) => ({
+        description: l.description, quantity: Number(l.quantity),
+        unit_price: Number(l.unit_price), total: Number(l.total),
+      }));
+      const taxRate = Number(inv.tax_rate ?? 0);
+      const subtotal = itemRows.reduce((s, it) => s + it.total, 0);
+      const tax = Math.round(subtotal * (taxRate / 100) * 100) / 100;
+      const total = subtotal + tax;
+      const paid = Number(inv.payment_amount ?? (inv.status === "PAID" ? total : 0));
+      const due = Math.max(0, total - paid);
+
+      // Best-effort short id as the human invoice number
+      await downloadInvoicePdf({
+        companyName: orgName,
+        invoiceNumber: inv.id.slice(0, 8).toUpperCase(),
+        customerName: inv.customer_name ?? "—",
+        issueDate: format(new Date(inv.issued_at), "MMM d, yyyy"),
+        dueDate: inv.due_date ? format(new Date(inv.due_date), "MMM d, yyyy") : undefined,
+        items: itemRows,
+        subtotal, taxRate, tax, total,
+        amountPaid: paid, amountDue: due,
+      });
+    } catch (err: any) {
+      toast({ title: "PDF failed", description: err?.message ?? "Unknown error", variant: "destructive" });
+    } finally {
+      setActionPending(null);
+    }
   };
 
   return (
@@ -137,17 +247,36 @@ const Invoices = () => {
           </div>
         ) : (
           <Table>
-            <TableHeader><TableRow>
-              <TableHead>Customer</TableHead><TableHead>Issued</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Amount</TableHead><TableHead className="w-12"></TableHead>
-            </TableRow></TableHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Customer</TableHead>
+                <TableHead>Issued</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+                <TableHead className="w-[230px] text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
             <TableBody>
               {filtered.map((i) => (
                 <TableRow key={i.id} className="cursor-pointer" onClick={() => openEdit(i)}>
                   <TableCell className="font-medium">{i.customer_name ?? "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{format(new Date(i.issued_at), "MMM d, yyyy")}</TableCell>
-                  <TableCell><span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide", styles[i.status])}>{i.status}</span></TableCell>
+                  <TableCell>
+                    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide", styles[i.status])}>{i.status}</span>
+                  </TableCell>
                   <TableCell className="text-right font-mono text-sm">${Number(i.amount).toLocaleString()}</TableCell>
-                  <TableCell><Pencil className="h-3.5 w-3.5 text-muted-foreground" /></TableCell>
+                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-1">
+                      {i.status === "SENT" && (
+                        <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" disabled={actionPending === i.id} onClick={() => markPaid(i)}>
+                          <CheckCircle className="h-3 w-3" /> Mark paid
+                        </Button>
+                      )}
+                      <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" disabled={actionPending === i.id} onClick={() => downloadPdf(i)}>
+                        <Download className="h-3 w-3" /> PDF
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -156,17 +285,37 @@ const Invoices = () => {
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-[480px]">
+        <DialogContent className="sm:max-w-[760px] max-h-[92vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editing ? "Edit invoice" : "New invoice"}</DialogTitle></DialogHeader>
           <form onSubmit={submit} className="space-y-4">
-            <div className="space-y-2"><Label>Customer</Label><Input value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} placeholder="Customer name" autoFocus /></div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2"><Label>Amount ($)</Label><Input type="number" min="0" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></div>
-              <div className="space-y-2"><Label>Status</Label>
+              <div className="space-y-2">
+                <Label htmlFor="cust">Customer</Label>
+                <Input id="cust" value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} placeholder="Customer name" autoFocus />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
                 <Select value={form.status} onValueChange={(v: Status) => setForm({ ...form, status: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="status"><SelectValue /></SelectTrigger>
                   <SelectContent>{STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                 </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Line items</Label>
+              <LineItemEditor
+                items={lines}
+                onChange={setLines}
+                taxRate={form.tax_rate}
+                onTaxRateChange={(n) => setForm({ ...form, tax_rate: n })}
+                amountPaid={editing?.payment_amount ?? 0}
+                showPaid={!!editing}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="due">Due date</Label>
+                <Input id="due" type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} />
               </div>
             </div>
             <DialogFooter>
