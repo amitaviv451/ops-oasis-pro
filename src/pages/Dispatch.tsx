@@ -253,7 +253,18 @@ const Dispatch = () => {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dispatch</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight">Dispatch</h1>
+            {live && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-success">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
+                </span>
+                Live
+              </span>
+            )}
+          </div>
           <p className="text-sm text-muted-foreground">Drag jobs onto a technician's time slot to schedule.</p>
         </div>
         <div className="flex items-center gap-2">
