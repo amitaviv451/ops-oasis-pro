@@ -202,7 +202,7 @@ const Estimates = () => {
         const { error } = await supabase.from("invoice_items").insert(invItems);
         if (error) throw error;
       }
-      toast({ title: `Invoice drafted from #${est.estimate_number}` });
+      toast({ title: `Invoice drafted from EST-${est.estimate_number}` });
       navigate("/invoices");
     } catch (err: any) {
       toast({ title: "Conversion failed", description: err?.message ?? "Unknown error", variant: "destructive" });
