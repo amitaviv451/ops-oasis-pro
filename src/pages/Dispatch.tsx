@@ -347,6 +347,7 @@ const Dispatch = () => {
                     dayStart={dayStart}
                     dayEnd={dayEnd}
                     onJobClick={(jid) => navigate(`/jobs/${jid}`)}
+                    conflictSlot={conflictSlot}
                   />
                 ))
               )}
