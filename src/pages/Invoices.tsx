@@ -286,7 +286,7 @@ const Invoices = () => {
                             <CheckCircle className="h-3 w-3" /> Mark paid
                           </Button>
                         )}
-                        <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={() => copyPortalLink("invoice", i.portal_token)}>
+                        <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={() => copyPortalLink("invoice", i.portal_token, i.id)}>
                           <Share2 className="h-3 w-3" /> Share
                         </Button>
                         <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" disabled={actionPending === i.id} onClick={() => downloadPdf(i)}>
