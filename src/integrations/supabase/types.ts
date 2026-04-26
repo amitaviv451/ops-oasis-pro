@@ -109,12 +109,16 @@ export type Database = {
       estimates: {
         Row: {
           amount: number
+          approved_at: string | null
           created_at: string
           customer_name: string | null
+          decline_reason: string | null
+          declined_at: string | null
           estimate_number: number
           id: string
           notes: string | null
           organization_id: string
+          portal_token: string
           status: Database["public"]["Enums"]["estimate_status"]
           tax_rate: number
           title: string
@@ -122,12 +126,16 @@ export type Database = {
         }
         Insert: {
           amount?: number
+          approved_at?: string | null
           created_at?: string
           customer_name?: string | null
+          decline_reason?: string | null
+          declined_at?: string | null
           estimate_number?: number
           id?: string
           notes?: string | null
           organization_id: string
+          portal_token?: string
           status?: Database["public"]["Enums"]["estimate_status"]
           tax_rate?: number
           title: string
@@ -135,12 +143,16 @@ export type Database = {
         }
         Update: {
           amount?: number
+          approved_at?: string | null
           created_at?: string
           customer_name?: string | null
+          decline_reason?: string | null
+          declined_at?: string | null
           estimate_number?: number
           id?: string
           notes?: string | null
           organization_id?: string
+          portal_token?: string
           status?: Database["public"]["Enums"]["estimate_status"]
           tax_rate?: number
           title?: string
@@ -262,6 +274,7 @@ export type Database = {
           organization_id: string
           paid_at: string | null
           payment_amount: number | null
+          portal_token: string
           status: Database["public"]["Enums"]["invoice_status"]
           tax_rate: number
         }
@@ -275,6 +288,7 @@ export type Database = {
           organization_id: string
           paid_at?: string | null
           payment_amount?: number | null
+          portal_token?: string
           status?: Database["public"]["Enums"]["invoice_status"]
           tax_rate?: number
         }
@@ -288,6 +302,7 @@ export type Database = {
           organization_id?: string
           paid_at?: string | null
           payment_amount?: number | null
+          portal_token?: string
           status?: Database["public"]["Enums"]["invoice_status"]
           tax_rate?: number
         }

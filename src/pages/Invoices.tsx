@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Search, Receipt, Download, CheckCircle } from "lucide-react";
+import { Plus, Search, Receipt, Download, CheckCircle, Share2 } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrgId } from "@/lib/useOrgId";
@@ -18,6 +18,7 @@ import { useDebounce } from "@/hooks/use-debounce";
 import { usePageParam } from "@/hooks/use-page-param";
 import { DataPagination, PAGE_SIZE } from "@/components/DataPagination";
 import { EmptyState } from "@/components/EmptyState";
+import { copyPortalLink } from "@/lib/portal";
 
 type Status = "DRAFT" | "SENT" | "PAID" | "OVERDUE";
 const STATUSES: Status[] = ["DRAFT", "SENT", "PAID", "OVERDUE"];
@@ -33,6 +34,7 @@ interface Invoice {
   due_date: string | null;
   tax_rate: number;
   organization_id: string;
+  portal_token: string | null;
 }
 
 const styles: Record<Status, string> = {
@@ -281,6 +283,9 @@ const Invoices = () => {
                             <CheckCircle className="h-3 w-3" /> Mark paid
                           </Button>
                         )}
+                        <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={() => copyPortalLink("invoice", i.portal_token)}>
+                          <Share2 className="h-3 w-3" /> Share
+                        </Button>
                         <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" disabled={actionPending === i.id} onClick={() => downloadPdf(i)}>
                           <Download className="h-3 w-3" /> PDF
                         </Button>

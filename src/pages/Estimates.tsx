@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, FileText, Send, Check, X, ArrowRight } from "lucide-react";
+import { Plus, Search, FileText, Send, Check, X, ArrowRight, Share2 } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrgId } from "@/lib/useOrgId";
@@ -18,6 +18,7 @@ import { useDebounce } from "@/hooks/use-debounce";
 import { usePageParam } from "@/hooks/use-page-param";
 import { DataPagination, PAGE_SIZE } from "@/components/DataPagination";
 import { EmptyState } from "@/components/EmptyState";
+import { copyPortalLink } from "@/lib/portal";
 
 type EstimateStatus = "DRAFT" | "SENT" | "ACCEPTED" | "DECLINED" | "EXPIRED";
 
@@ -33,6 +34,7 @@ interface Estimate {
   tax_rate: number;
   created_at: string;
   organization_id: string;
+  portal_token: string | null;
 }
 
 const STATUSES: EstimateStatus[] = ["DRAFT", "SENT", "ACCEPTED", "DECLINED", "EXPIRED"];
@@ -287,6 +289,9 @@ const Estimates = () => {
                     <TableCell className="text-right font-mono text-sm">${Number(est.amount).toLocaleString()}</TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
+                        <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={() => copyPortalLink("estimate", est.portal_token)}>
+                          <Share2 className="h-3 w-3" /> Share
+                        </Button>
                         {est.status === "DRAFT" && (
                           <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" disabled={actionPending === est.id} onClick={() => updateStatus(est, "SENT")}>
                             <Send className="h-3 w-3" /> Send
