@@ -147,21 +147,7 @@ const Jobs = () => {
   }, [jobs, search, statusFilter]);
 
   const openCreate = () => {
-    setEditing(null);
     setForm(emptyForm);
-    setDialogOpen(true);
-  };
-
-  const openEdit = (job: Job) => {
-    setEditing(job);
-    setForm({
-      title: job.title,
-      customer_name: job.customer_name ?? "",
-      status: job.status,
-      scheduled_at: job.scheduled_at ? job.scheduled_at.slice(0, 16) : "",
-      estimated_cost: job.estimated_cost?.toString() ?? "",
-      actual_cost: job.actual_cost?.toString() ?? "",
-    });
     setDialogOpen(true);
   };
 
@@ -174,7 +160,6 @@ const Jobs = () => {
     if (!user) return;
     setSaving(true);
 
-    // Resolve org_id via profile (RLS scopes to org)
     const { data: profile } = await supabase
       .from("profiles")
       .select("organization_id")
@@ -196,21 +181,16 @@ const Jobs = () => {
       actual_cost: form.actual_cost ? Number(form.actual_cost) : null,
     };
 
-    let error;
-    if (editing) {
-      ({ error } = await supabase.from("jobs").update(payload).eq("id", editing.id));
-    } else {
-      ({ error } = await supabase
-        .from("jobs")
-        .insert({ ...payload, organization_id: profile.organization_id }));
-    }
+    const { error } = await supabase
+      .from("jobs")
+      .insert({ ...payload, organization_id: profile.organization_id });
 
     setSaving(false);
     if (error) {
       toast({ title: "Save failed", description: error.message, variant: "destructive" });
       return;
     }
-    toast({ title: editing ? "Job updated" : "Job created" });
+    toast({ title: "Job created" });
     setDialogOpen(false);
     loadJobs();
   };
