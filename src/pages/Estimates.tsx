@@ -326,7 +326,7 @@ const Estimates = () => {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-[760px] max-h-[92vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editing ? `Edit estimate #${editing.estimate_number}` : "New estimate"}</DialogTitle>
+            <DialogTitle>{editing ? `Edit estimate EST-${editing.estimate_number}` : "New estimate"}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
