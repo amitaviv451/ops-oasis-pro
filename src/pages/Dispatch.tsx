@@ -185,6 +185,7 @@ const Dispatch = () => {
 
   const handleDragEnd = async (e: DragEndEvent) => {
     setActiveJob(null);
+    setConflictSlot(null);
     const { active, over } = e;
     if (!over) return;
     const job = jobs.find((j) => j.id === active.id);
