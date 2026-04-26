@@ -107,6 +107,34 @@ const Dispatch = () => {
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [orgId]);
 
+  // Realtime subscription on jobs
+  useEffect(() => {
+    if (!orgId) return;
+    const channel = supabase
+      .channel("dispatch-jobs")
+      .on("postgres_changes", { event: "*", schema: "public", table: "jobs" }, (payload) => {
+        const newRow = payload.new as Job | null;
+        const oldRow = payload.old as { id?: string } | null;
+        setJobs((curr) => {
+          if (payload.eventType === "DELETE") {
+            return curr.filter((j) => j.id !== oldRow?.id);
+          }
+          if (!newRow?.id) return curr;
+          // Filter out soft-deleted/cancelled/completed
+          const anyNew = newRow as any;
+          if (anyNew.deleted_at || newRow.status === "CANCELLED" || newRow.status === "COMPLETED") {
+            return curr.filter((j) => j.id !== newRow.id);
+          }
+          const exists = curr.some((j) => j.id === newRow.id);
+          return exists
+            ? curr.map((j) => (j.id === newRow.id ? { ...j, ...newRow } : j))
+            : [...curr, newRow];
+        });
+      })
+      .subscribe((status) => setLive(status === "SUBSCRIBED"));
+    return () => { supabase.removeChannel(channel); setLive(false); };
+  }, [orgId]);
+
   const unscheduled = useMemo(
     () => jobs.filter((j) => !j.scheduled_start || !j.technician_id),
     [jobs],
@@ -124,8 +152,35 @@ const Dispatch = () => {
     return map;
   }, [jobs, techs, date]);
 
+  // Compute conflict for a candidate slot
+  const slotHasConflict = (techId: string, hour: number, draggedJobId: string) => {
+    const draggedJob = jobsRef.current.find((j) => j.id === draggedJobId);
+    if (!draggedJob) return false;
+    const newStart = new Date(date); newStart.setHours(hour, 0, 0, 0);
+    const durationMin = draggedJob.estimated_duration_minutes ?? 60;
+    const newEnd = new Date(newStart.getTime() + durationMin * 60_000);
+    return jobsRef.current.some((j) => {
+      if (j.id === draggedJob.id) return false;
+      if (j.technician_id !== techId) return false;
+      if (!j.scheduled_start || !j.scheduled_end) return false;
+      if (!isSameDay(new Date(j.scheduled_start), date)) return false;
+      const s = new Date(j.scheduled_start).getTime();
+      const eMs = new Date(j.scheduled_end).getTime();
+      return newStart.getTime() < eMs && newEnd.getTime() > s;
+    });
+  };
+
   const handleDragStart = (e: DragStartEvent) => {
     setActiveJob(jobs.find((j) => j.id === e.active.id) ?? null);
+  };
+
+  const handleDragOver = (e: DragOverEvent) => {
+    const overId = e.over ? String(e.over.id) : "";
+    if (!overId.startsWith("slot:")) { setConflictSlot(null); return; }
+    const [, techId, hourStr] = overId.split(":");
+    const hour = Number(hourStr);
+    const draggedId = String(e.active.id);
+    setConflictSlot(slotHasConflict(techId, hour, draggedId) ? overId : null);
   };
 
   const handleDragEnd = async (e: DragEndEvent) => {
