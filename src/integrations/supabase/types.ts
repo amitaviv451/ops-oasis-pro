@@ -152,6 +152,7 @@ export type Database = {
           customer_name: string | null
           id: string
           issued_at: string
+          job_id: string | null
           organization_id: string
           paid_at: string | null
           status: Database["public"]["Enums"]["invoice_status"]
@@ -161,6 +162,7 @@ export type Database = {
           customer_name?: string | null
           id?: string
           issued_at?: string
+          job_id?: string | null
           organization_id: string
           paid_at?: string | null
           status?: Database["public"]["Enums"]["invoice_status"]
@@ -170,11 +172,19 @@ export type Database = {
           customer_name?: string | null
           id?: string
           issued_at?: string
+          job_id?: string | null
           organization_id?: string
           paid_at?: string | null
           status?: Database["public"]["Enums"]["invoice_status"]
         }
         Relationships: [
+          {
+            foreignKeyName: "invoices_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "invoices_organization_id_fkey"
             columns: ["organization_id"]
