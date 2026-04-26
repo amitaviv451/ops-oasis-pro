@@ -277,7 +277,7 @@ const Estimates = () => {
               <TableBody>
                 {estimates.map((est) => (
                   <TableRow key={est.id} className="cursor-pointer" onClick={() => openEdit(est)}>
-                    <TableCell className="font-mono text-xs text-muted-foreground">#{est.estimate_number}</TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">EST-{est.estimate_number}</TableCell>
                     <TableCell className="font-medium">{est.title}</TableCell>
                     <TableCell className="text-muted-foreground">{est.customer_name ?? "—"}</TableCell>
                     <TableCell className="text-muted-foreground">{est.valid_until ? format(new Date(est.valid_until), "MMM d, yyyy") : "—"}</TableCell>
