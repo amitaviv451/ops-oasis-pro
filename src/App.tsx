@@ -26,6 +26,8 @@ import Reports from "./pages/Reports";
 import ServiceAreas from "./pages/ServiceAreas";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
+import PortalInvoice from "./pages/PortalInvoice";
+import PortalEstimate from "./pages/PortalEstimate";
 
 const queryClient = new QueryClient();
 
@@ -59,6 +61,8 @@ const App = () => (
               <Route path="/" element={<Landing />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/portal/invoice/:token" element={<PortalInvoice />} />
+              <Route path="/portal/estimate/:token" element={<PortalEstimate />} />
               {protectedRoutes.map((r) => (
                 <Route
                   key={r.path}
