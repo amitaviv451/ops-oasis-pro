@@ -194,7 +194,7 @@ const Invoices = () => {
       const due = Math.max(0, grand - paid);
       await downloadInvoicePdf({
         companyName: orgName,
-        invoiceNumber: inv.id.slice(0, 8).toUpperCase(),
+        invoiceNumber: `INV-${inv.invoice_number}`,
         customerName: inv.customer_name ?? "—",
         issueDate: format(new Date(inv.issued_at), "MMM d, yyyy"),
         dueDate: inv.due_date ? format(new Date(inv.due_date), "MMM d, yyyy") : undefined,
