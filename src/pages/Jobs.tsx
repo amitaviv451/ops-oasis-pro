@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, Briefcase, Pencil, Receipt } from "lucide-react";
+import { Plus, Search, Briefcase, Trash2, Receipt } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "@/hooks/use-toast";
@@ -63,10 +64,11 @@ const Jobs = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | JobStatus>("ALL");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<Job | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [invoicingId, setInvoicingId] = useState<string | null>(null);
+  const [deletingJob, setDeletingJob] = useState<Job | null>(null);
+  const [confirmDeleting, setConfirmDeleting] = useState(false);
 
   const createInvoiceFromJob = async (job: Job) => {
     if (!user) return;
@@ -84,7 +86,8 @@ const Jobs = () => {
       customer_name: job.customer_name,
       amount,
       status: "DRAFT",
-    });
+      job_id: job.id,
+    } as any);
     setInvoicingId(null);
     if (error) {
       toast({ title: "Failed to create invoice", description: error.message, variant: "destructive" });
@@ -99,6 +102,7 @@ const Jobs = () => {
     const { data, error } = await supabase
       .from("jobs")
       .select("*")
+      .is("deleted_at", null)
       .order("created_at", { ascending: false });
     if (error) {
       toast({ title: "Failed to load jobs", description: error.message, variant: "destructive" });
@@ -106,6 +110,23 @@ const Jobs = () => {
       setJobs((data ?? []) as Job[]);
     }
     setLoading(false);
+  };
+
+  const softDeleteJob = async () => {
+    if (!deletingJob) return;
+    setConfirmDeleting(true);
+    const { error } = await supabase
+      .from("jobs")
+      .update({ deleted_at: new Date().toISOString() } as any)
+      .eq("id", deletingJob.id);
+    setConfirmDeleting(false);
+    if (error) {
+      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: `Job #${deletingJob.job_number} deleted` });
+    setDeletingJob(null);
+    loadJobs();
   };
 
   useEffect(() => {
@@ -126,21 +147,7 @@ const Jobs = () => {
   }, [jobs, search, statusFilter]);
 
   const openCreate = () => {
-    setEditing(null);
     setForm(emptyForm);
-    setDialogOpen(true);
-  };
-
-  const openEdit = (job: Job) => {
-    setEditing(job);
-    setForm({
-      title: job.title,
-      customer_name: job.customer_name ?? "",
-      status: job.status,
-      scheduled_at: job.scheduled_at ? job.scheduled_at.slice(0, 16) : "",
-      estimated_cost: job.estimated_cost?.toString() ?? "",
-      actual_cost: job.actual_cost?.toString() ?? "",
-    });
     setDialogOpen(true);
   };
 
@@ -153,7 +160,6 @@ const Jobs = () => {
     if (!user) return;
     setSaving(true);
 
-    // Resolve org_id via profile (RLS scopes to org)
     const { data: profile } = await supabase
       .from("profiles")
       .select("organization_id")
@@ -175,21 +181,16 @@ const Jobs = () => {
       actual_cost: form.actual_cost ? Number(form.actual_cost) : null,
     };
 
-    let error;
-    if (editing) {
-      ({ error } = await supabase.from("jobs").update(payload).eq("id", editing.id));
-    } else {
-      ({ error } = await supabase
-        .from("jobs")
-        .insert({ ...payload, organization_id: profile.organization_id }));
-    }
+    const { error } = await supabase
+      .from("jobs")
+      .insert({ ...payload, organization_id: profile.organization_id });
 
     setSaving(false);
     if (error) {
       toast({ title: "Save failed", description: error.message, variant: "destructive" });
       return;
     }
-    toast({ title: editing ? "Job updated" : "Job created" });
+    toast({ title: "Job created" });
     setDialogOpen(false);
     loadJobs();
   };
@@ -278,12 +279,12 @@ const Jobs = () => {
                 <TableHead>Scheduled</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Estimated</TableHead>
-                <TableHead className="w-12"></TableHead>
+                <TableHead className="w-32 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.map((job) => (
-                <TableRow key={job.id} className="cursor-pointer" onClick={() => openEdit(job)}>
+                <TableRow key={job.id} className="cursor-pointer" onClick={() => navigate(`/jobs/${job.id}`)}>
                   <TableCell className="font-mono text-xs text-muted-foreground">#{job.job_number}</TableCell>
                   <TableCell className="font-medium">{job.title}</TableCell>
                   <TableCell className="text-muted-foreground">{job.customer_name ?? "—"}</TableCell>
@@ -305,21 +306,30 @@ const Jobs = () => {
                   <TableCell className="text-right font-mono text-sm">
                     {job.estimated_cost != null ? `$${Number(job.estimated_cost).toLocaleString()}` : "—"}
                   </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    {job.status === "COMPLETED" ? (
+                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-1">
+                      {job.status === "COMPLETED" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1.5 px-2 text-xs"
+                          disabled={invoicingId === job.id}
+                          onClick={() => createInvoiceFromJob(job)}
+                        >
+                          <Receipt className="h-3.5 w-3.5" />
+                          {invoicingId === job.id ? "..." : "Invoice"}
+                        </Button>
+                      )}
                       <Button
                         size="sm"
-                        variant="outline"
-                        className="h-7 gap-1.5 px-2 text-xs"
-                        disabled={invoicingId === job.id}
-                        onClick={() => createInvoiceFromJob(job)}
+                        variant="ghost"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => setDeletingJob(job)}
+                        aria-label={`Delete job #${job.job_number}`}
                       >
-                        <Receipt className="h-3.5 w-3.5" />
-                        {invoicingId === job.id ? "..." : "Invoice"}
+                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
-                    ) : (
-                      <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                    )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -332,7 +342,7 @@ const Jobs = () => {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>{editing ? `Edit job #${editing.job_number}` : "New job"}</DialogTitle>
+            <DialogTitle>New job</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
@@ -403,12 +413,34 @@ const Jobs = () => {
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={saving}>
-                {saving ? "Saving..." : editing ? "Save changes" : "Create job"}
+                {saving ? "Saving..." : "Create job"}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Soft-delete confirm */}
+      <AlertDialog open={!!deletingJob} onOpenChange={(o) => !o && setDeletingJob(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete job{deletingJob ? ` #${deletingJob.job_number}` : ""}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will hide the job from all lists. You can recover it from the database if needed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={softDeleteJob}
+              disabled={confirmDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {confirmDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

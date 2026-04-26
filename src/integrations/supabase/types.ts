@@ -152,6 +152,7 @@ export type Database = {
           customer_name: string | null
           id: string
           issued_at: string
+          job_id: string | null
           organization_id: string
           paid_at: string | null
           status: Database["public"]["Enums"]["invoice_status"]
@@ -161,6 +162,7 @@ export type Database = {
           customer_name?: string | null
           id?: string
           issued_at?: string
+          job_id?: string | null
           organization_id: string
           paid_at?: string | null
           status?: Database["public"]["Enums"]["invoice_status"]
@@ -170,13 +172,108 @@ export type Database = {
           customer_name?: string | null
           id?: string
           issued_at?: string
+          job_id?: string | null
           organization_id?: string
           paid_at?: string | null
           status?: Database["public"]["Enums"]["invoice_status"]
         }
         Relationships: [
           {
+            foreignKeyName: "invoices_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "invoices_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_notes: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          job_id: string
+          organization_id: string
+          user_email: string | null
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          job_id: string
+          organization_id: string
+          user_email?: string | null
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          job_id?: string
+          organization_id?: string
+          user_email?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_notes_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_notes_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_timeline: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          from_status: Database["public"]["Enums"]["job_status"] | null
+          id: string
+          job_id: string
+          organization_id: string
+          to_status: Database["public"]["Enums"]["job_status"]
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          from_status?: Database["public"]["Enums"]["job_status"] | null
+          id?: string
+          job_id: string
+          organization_id: string
+          to_status: Database["public"]["Enums"]["job_status"]
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          from_status?: Database["public"]["Enums"]["job_status"] | null
+          id?: string
+          job_id?: string
+          organization_id?: string
+          to_status?: Database["public"]["Enums"]["job_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_timeline_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_timeline_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -187,37 +284,52 @@ export type Database = {
       jobs: {
         Row: {
           actual_cost: number | null
+          address: string | null
+          assigned_technician: string | null
           created_at: string
           customer_name: string | null
+          deleted_at: string | null
           estimated_cost: number | null
           id: string
           job_number: number
           organization_id: string
+          priority: string
           scheduled_at: string | null
+          service_type: string | null
           status: Database["public"]["Enums"]["job_status"]
           title: string
         }
         Insert: {
           actual_cost?: number | null
+          address?: string | null
+          assigned_technician?: string | null
           created_at?: string
           customer_name?: string | null
+          deleted_at?: string | null
           estimated_cost?: number | null
           id?: string
           job_number?: number
           organization_id: string
+          priority?: string
           scheduled_at?: string | null
+          service_type?: string | null
           status?: Database["public"]["Enums"]["job_status"]
           title: string
         }
         Update: {
           actual_cost?: number | null
+          address?: string | null
+          assigned_technician?: string | null
           created_at?: string
           customer_name?: string | null
+          deleted_at?: string | null
           estimated_cost?: number | null
           id?: string
           job_number?: number
           organization_id?: string
+          priority?: string
           scheduled_at?: string | null
+          service_type?: string | null
           status?: Database["public"]["Enums"]["job_status"]
           title?: string
         }

@@ -12,6 +12,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
+import JobDetail from "./pages/JobDetail";
 import Leads from "./pages/Leads";
 import Dispatch from "./pages/Dispatch";
 import Estimates from "./pages/Estimates";
@@ -32,6 +33,7 @@ const protectedRoutes: { path: string; element: React.ReactNode }[] = [
   { path: "/dashboard", element: <Dashboard /> },
   { path: "/leads", element: <Leads /> },
   { path: "/jobs", element: <Jobs /> },
+  { path: "/jobs/:id", element: <JobDetail /> },
   { path: "/dispatch", element: <Dispatch /> },
   { path: "/customers", element: <Customers /> },
   { path: "/estimates", element: <Estimates /> },
