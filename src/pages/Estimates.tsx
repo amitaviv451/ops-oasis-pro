@@ -80,8 +80,18 @@ const Estimates = () => {
     setAggregates({ accepted, outstanding, counts: c });
   }, []);
 
+  const expireOverdueEstimates = useCallback(async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    await supabase
+      .from("estimates")
+      .update({ status: "EXPIRED" })
+      .eq("status", "SENT")
+      .lt("valid_until", today);
+  }, []);
+
   const load = useCallback(async (isInitial: boolean) => {
     if (isInitial) setInitialLoading(true); else setPageLoading(true);
+    await expireOverdueEstimates();
     let query = supabase.from("estimates").select("*", { count: "exact" }).order("created_at", { ascending: false });
     if (statusFilter !== "ALL") query = query.eq("status", statusFilter);
     const q = debouncedSearch.trim();
@@ -96,7 +106,7 @@ const Estimates = () => {
     if (error) toast({ title: "Failed to load estimates", description: error.message, variant: "destructive" });
     else { setEstimates((data ?? []) as Estimate[]); setTotal(count ?? 0); }
     if (isInitial) setInitialLoading(false); else setPageLoading(false);
-  }, [debouncedSearch, statusFilter, page]);
+  }, [debouncedSearch, statusFilter, page, expireOverdueEstimates]);
 
   useEffect(() => { if (page !== 1) setPage(1); /* eslint-disable-next-line */ }, [debouncedSearch, statusFilter]);
   useEffect(() => { load(initialLoading); /* eslint-disable-next-line */ }, [load]);
