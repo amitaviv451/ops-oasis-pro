@@ -295,7 +295,7 @@ const Dispatch = () => {
         </div>
       </div>
 
-      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
         <div className="grid grid-cols-[260px_1fr] gap-4">
           <aside className="rounded-xl border border-border bg-card p-3 shadow-soft">
             <div className="mb-2 flex items-center justify-between">
