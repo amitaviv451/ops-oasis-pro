@@ -391,9 +391,10 @@ const JobCard = ({ job, dragging }: { job: Job; dragging?: boolean }) => {
 };
 
 const TechRow = ({
-  tech, jobs, dayStart, dayEnd, onJobClick,
+  tech, jobs, dayStart, dayEnd, onJobClick, conflictSlot,
 }: {
   tech: Tech; jobs: Job[]; dayStart: Date; dayEnd: Date; onJobClick: (id: string) => void;
+  conflictSlot: string | null;
 }) => (
   <div className="flex border-b border-border last:border-b-0" style={{ height: ROW_HEIGHT }}>
     <div style={{ width: TECH_COL_WIDTH }} className="shrink-0 border-r border-border bg-muted/20 p-3">
@@ -401,7 +402,14 @@ const TechRow = ({
       <div className="truncate text-xs text-muted-foreground">{tech.email}</div>
     </div>
     <div className="relative flex">
-      {HOURS.map((h) => <SlotCell key={h} techId={tech.id} hour={h} />)}
+      {HOURS.map((h) => (
+        <SlotCell
+          key={h}
+          techId={tech.id}
+          hour={h}
+          conflict={conflictSlot === `slot:${tech.id}:${h}`}
+        />
+      ))}
       {jobs.map((job) => (
         <JobBlock key={job.id} job={job} dayStart={dayStart} dayEnd={dayEnd} onClick={() => onJobClick(job.id)} />
       ))}
@@ -409,7 +417,7 @@ const TechRow = ({
   </div>
 );
 
-const SlotCell = ({ techId, hour }: { techId: string; hour: number }) => {
+const SlotCell = ({ techId, hour, conflict }: { techId: string; hour: number; conflict: boolean }) => {
   const { setNodeRef, isOver } = useDroppable({ id: `slot:${techId}:${hour}` });
   return (
     <div
@@ -417,7 +425,8 @@ const SlotCell = ({ techId, hour }: { techId: string; hour: number }) => {
       style={{ width: SLOT_WIDTH }}
       className={cn(
         "h-full shrink-0 border-r border-border transition-colors",
-        isOver && "bg-primary/15 ring-2 ring-inset ring-primary",
+        isOver && !conflict && "bg-primary/15 ring-2 ring-inset ring-primary",
+        isOver && conflict && "bg-destructive/20 ring-2 ring-inset ring-destructive",
       )}
     />
   );
