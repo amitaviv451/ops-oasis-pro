@@ -279,12 +279,12 @@ const Jobs = () => {
                 <TableHead>Scheduled</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Estimated</TableHead>
-                <TableHead className="w-12"></TableHead>
+                <TableHead className="w-32 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.map((job) => (
-                <TableRow key={job.id} className="cursor-pointer" onClick={() => openEdit(job)}>
+                <TableRow key={job.id} className="cursor-pointer" onClick={() => navigate(`/jobs/${job.id}`)}>
                   <TableCell className="font-mono text-xs text-muted-foreground">#{job.job_number}</TableCell>
                   <TableCell className="font-medium">{job.title}</TableCell>
                   <TableCell className="text-muted-foreground">{job.customer_name ?? "—"}</TableCell>
@@ -306,21 +306,30 @@ const Jobs = () => {
                   <TableCell className="text-right font-mono text-sm">
                     {job.estimated_cost != null ? `$${Number(job.estimated_cost).toLocaleString()}` : "—"}
                   </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    {job.status === "COMPLETED" ? (
+                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-1">
+                      {job.status === "COMPLETED" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1.5 px-2 text-xs"
+                          disabled={invoicingId === job.id}
+                          onClick={() => createInvoiceFromJob(job)}
+                        >
+                          <Receipt className="h-3.5 w-3.5" />
+                          {invoicingId === job.id ? "..." : "Invoice"}
+                        </Button>
+                      )}
                       <Button
                         size="sm"
-                        variant="outline"
-                        className="h-7 gap-1.5 px-2 text-xs"
-                        disabled={invoicingId === job.id}
-                        onClick={() => createInvoiceFromJob(job)}
+                        variant="ghost"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => setDeletingJob(job)}
+                        aria-label={`Delete job #${job.job_number}`}
                       >
-                        <Receipt className="h-3.5 w-3.5" />
-                        {invoicingId === job.id ? "..." : "Invoice"}
+                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
-                    ) : (
-                      <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                    )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -333,7 +342,7 @@ const Jobs = () => {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>{editing ? `Edit job #${editing.job_number}` : "New job"}</DialogTitle>
+            <DialogTitle>New job</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
