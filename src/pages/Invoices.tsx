@@ -272,6 +272,7 @@ const Invoices = () => {
               <TableBody>
                 {items.map((i) => (
                   <TableRow key={i.id} className="cursor-pointer" onClick={() => openEdit(i)}>
+                    <TableCell className="font-mono text-xs text-muted-foreground">INV-{i.invoice_number}</TableCell>
                     <TableCell className="font-medium">{i.customer_name ?? "—"}</TableCell>
                     <TableCell className="text-muted-foreground">{format(new Date(i.issued_at), "MMM d, yyyy")}</TableCell>
                     <TableCell>
