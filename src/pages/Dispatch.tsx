@@ -62,6 +62,10 @@ const Dispatch = () => {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeJob, setActiveJob] = useState<Job | null>(null);
+  const [conflictSlot, setConflictSlot] = useState<string | null>(null);
+  const [live, setLive] = useState(false);
+  const jobsRef = useRef<Job[]>([]);
+  jobsRef.current = jobs;
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
