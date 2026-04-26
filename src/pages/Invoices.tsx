@@ -25,6 +25,7 @@ const STATUSES: Status[] = ["DRAFT", "SENT", "PAID", "OVERDUE"];
 
 interface Invoice {
   id: string;
+  invoice_number: number;
   customer_name: string | null;
   amount: number;
   status: Status;
@@ -193,7 +194,7 @@ const Invoices = () => {
       const due = Math.max(0, grand - paid);
       await downloadInvoicePdf({
         companyName: orgName,
-        invoiceNumber: inv.id.slice(0, 8).toUpperCase(),
+        invoiceNumber: `INV-${inv.invoice_number}`,
         customerName: inv.customer_name ?? "—",
         issueDate: format(new Date(inv.issued_at), "MMM d, yyyy"),
         dueDate: inv.due_date ? format(new Date(inv.due_date), "MMM d, yyyy") : undefined,
@@ -260,6 +261,7 @@ const Invoices = () => {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-24">#</TableHead>
                   <TableHead>Customer</TableHead>
                   <TableHead>Issued</TableHead>
                   <TableHead>Status</TableHead>
@@ -270,6 +272,7 @@ const Invoices = () => {
               <TableBody>
                 {items.map((i) => (
                   <TableRow key={i.id} className="cursor-pointer" onClick={() => openEdit(i)}>
+                    <TableCell className="font-mono text-xs text-muted-foreground">INV-{i.invoice_number}</TableCell>
                     <TableCell className="font-medium">{i.customer_name ?? "—"}</TableCell>
                     <TableCell className="text-muted-foreground">{format(new Date(i.issued_at), "MMM d, yyyy")}</TableCell>
                     <TableCell>
@@ -283,7 +286,7 @@ const Invoices = () => {
                             <CheckCircle className="h-3 w-3" /> Mark paid
                           </Button>
                         )}
-                        <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={() => copyPortalLink("invoice", i.portal_token)}>
+                        <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={() => copyPortalLink("invoice", i.portal_token, i.id)}>
                           <Share2 className="h-3 w-3" /> Share
                         </Button>
                         <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" disabled={actionPending === i.id} onClick={() => downloadPdf(i)}>

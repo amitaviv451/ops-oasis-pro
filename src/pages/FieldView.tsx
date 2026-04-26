@@ -193,6 +193,13 @@ const TabButton = ({ active, onClick, icon, label }: { active: boolean; onClick:
   </button>
 );
 
+interface JobNote {
+  id: string;
+  body: string;
+  created_at: string;
+  user_email: string | null;
+}
+
 const JobCard = ({
   job, expanded, onToggle, onStatusChange, userId,
 }: {
@@ -207,6 +214,23 @@ const JobCard = ({
   const [actualCost, setActualCost] = useState<string>(job.estimated_cost ? String(job.estimated_cost) : "");
   const [showCostPrompt, setShowCostPrompt] = useState(false);
   const [pending, setPending] = useState(false);
+  const [notes, setNotes] = useState<JobNote[]>([]);
+  const [notesLoading, setNotesLoading] = useState(false);
+
+  const fetchNotes = useCallback(async () => {
+    setNotesLoading(true);
+    const { data } = await supabase
+      .from("job_notes")
+      .select("id, body, created_at, user_email")
+      .eq("job_id", job.id)
+      .order("created_at", { ascending: false });
+    setNotes((data ?? []) as JobNote[]);
+    setNotesLoading(false);
+  }, [job.id]);
+
+  useEffect(() => {
+    if (expanded) fetchNotes();
+  }, [expanded, fetchNotes]);
 
   const saveNote = async () => {
     if (!note.trim()) return;
@@ -218,6 +242,7 @@ const JobCard = ({
     if (error) return toast({ title: "Failed to save note", description: error.message, variant: "destructive" });
     setNote("");
     toast({ title: "Note added" });
+    fetchNotes();
   };
 
   const onMyWay = async () => {
@@ -286,6 +311,23 @@ const JobCard = ({
             <Button onClick={saveNote} disabled={!note.trim() || savingNote} variant="outline" className="h-12 w-full gap-2">
               <Plus className="h-4 w-4" /> {savingNote ? "Saving..." : "Add note"}
             </Button>
+            {notesLoading ? (
+              <Skeleton className="h-12 w-full" />
+            ) : notes.length > 0 ? (
+              <ul className="space-y-2 pt-2">
+                {notes.map((n) => (
+                  <li key={n.id} className="rounded-lg border border-border bg-card p-3">
+                    <div className="text-sm whitespace-pre-wrap">{n.body}</div>
+                    <div className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                      {format(new Date(n.created_at), "MMM d, h:mm a")}
+                      {n.user_email ? ` · ${n.user_email}` : ""}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="pt-1 text-xs text-muted-foreground">No notes yet.</p>
+            )}
           </div>
 
           {job.status === "SCHEDULED" || job.status === "NEW" ? (

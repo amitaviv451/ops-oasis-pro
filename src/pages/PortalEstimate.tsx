@@ -108,7 +108,7 @@ const PortalEstimate = () => {
             </div>
             <div className="text-right">
               <h1 className="text-3xl font-bold tracking-tight">ESTIMATE</h1>
-              <div className="text-sm text-muted-foreground mt-1">#{est.estimate_number}</div>
+              <div className="text-sm text-muted-foreground mt-1">EST-{est.estimate_number}</div>
             </div>
           </div>
 

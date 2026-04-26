@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { addDays, format, isSameDay, startOfDay } from "date-fns";
 import { CalendarIcon, ChevronLeft, ChevronRight, GripVertical, Clock } from "lucide-react";
 import {
-  DndContext, DragEndEvent, DragOverlay, DragStartEvent,
+  DndContext, DragEndEvent, DragOverEvent, DragOverlay, DragStartEvent,
   PointerSensor, useDraggable, useDroppable, useSensor, useSensors,
 } from "@dnd-kit/core";
 import { supabase } from "@/integrations/supabase/client";
@@ -62,6 +62,10 @@ const Dispatch = () => {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeJob, setActiveJob] = useState<Job | null>(null);
+  const [conflictSlot, setConflictSlot] = useState<string | null>(null);
+  const [live, setLive] = useState(false);
+  const jobsRef = useRef<Job[]>([]);
+  jobsRef.current = jobs;
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
@@ -103,6 +107,34 @@ const Dispatch = () => {
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [orgId]);
 
+  // Realtime subscription on jobs
+  useEffect(() => {
+    if (!orgId) return;
+    const channel = supabase
+      .channel("dispatch-jobs")
+      .on("postgres_changes", { event: "*", schema: "public", table: "jobs" }, (payload) => {
+        const newRow = payload.new as Job | null;
+        const oldRow = payload.old as { id?: string } | null;
+        setJobs((curr) => {
+          if (payload.eventType === "DELETE") {
+            return curr.filter((j) => j.id !== oldRow?.id);
+          }
+          if (!newRow?.id) return curr;
+          // Filter out soft-deleted/cancelled/completed
+          const anyNew = newRow as any;
+          if (anyNew.deleted_at || newRow.status === "CANCELLED" || newRow.status === "COMPLETED") {
+            return curr.filter((j) => j.id !== newRow.id);
+          }
+          const exists = curr.some((j) => j.id === newRow.id);
+          return exists
+            ? curr.map((j) => (j.id === newRow.id ? { ...j, ...newRow } : j))
+            : [...curr, newRow];
+        });
+      })
+      .subscribe((status) => setLive(status === "SUBSCRIBED"));
+    return () => { supabase.removeChannel(channel); setLive(false); };
+  }, [orgId]);
+
   const unscheduled = useMemo(
     () => jobs.filter((j) => !j.scheduled_start || !j.technician_id),
     [jobs],
@@ -120,12 +152,40 @@ const Dispatch = () => {
     return map;
   }, [jobs, techs, date]);
 
+  // Compute conflict for a candidate slot
+  const slotHasConflict = (techId: string, hour: number, draggedJobId: string) => {
+    const draggedJob = jobsRef.current.find((j) => j.id === draggedJobId);
+    if (!draggedJob) return false;
+    const newStart = new Date(date); newStart.setHours(hour, 0, 0, 0);
+    const durationMin = draggedJob.estimated_duration_minutes ?? 60;
+    const newEnd = new Date(newStart.getTime() + durationMin * 60_000);
+    return jobsRef.current.some((j) => {
+      if (j.id === draggedJob.id) return false;
+      if (j.technician_id !== techId) return false;
+      if (!j.scheduled_start || !j.scheduled_end) return false;
+      if (!isSameDay(new Date(j.scheduled_start), date)) return false;
+      const s = new Date(j.scheduled_start).getTime();
+      const eMs = new Date(j.scheduled_end).getTime();
+      return newStart.getTime() < eMs && newEnd.getTime() > s;
+    });
+  };
+
   const handleDragStart = (e: DragStartEvent) => {
     setActiveJob(jobs.find((j) => j.id === e.active.id) ?? null);
   };
 
+  const handleDragOver = (e: DragOverEvent) => {
+    const overId = e.over ? String(e.over.id) : "";
+    if (!overId.startsWith("slot:")) { setConflictSlot(null); return; }
+    const [, techId, hourStr] = overId.split(":");
+    const hour = Number(hourStr);
+    const draggedId = String(e.active.id);
+    setConflictSlot(slotHasConflict(techId, hour, draggedId) ? overId : null);
+  };
+
   const handleDragEnd = async (e: DragEndEvent) => {
     setActiveJob(null);
+    setConflictSlot(null);
     const { active, over } = e;
     if (!over) return;
     const job = jobs.find((j) => j.id === active.id);
@@ -193,7 +253,18 @@ const Dispatch = () => {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dispatch</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight">Dispatch</h1>
+            {live && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-success">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
+                </span>
+                Live
+              </span>
+            )}
+          </div>
           <p className="text-sm text-muted-foreground">Drag jobs onto a technician's time slot to schedule.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -224,7 +295,7 @@ const Dispatch = () => {
         </div>
       </div>
 
-      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
         <div className="grid grid-cols-[260px_1fr] gap-4">
           <aside className="rounded-xl border border-border bg-card p-3 shadow-soft">
             <div className="mb-2 flex items-center justify-between">
@@ -276,6 +347,7 @@ const Dispatch = () => {
                     dayStart={dayStart}
                     dayEnd={dayEnd}
                     onJobClick={(jid) => navigate(`/jobs/${jid}`)}
+                    conflictSlot={conflictSlot}
                   />
                 ))
               )}
@@ -319,9 +391,10 @@ const JobCard = ({ job, dragging }: { job: Job; dragging?: boolean }) => {
 };
 
 const TechRow = ({
-  tech, jobs, dayStart, dayEnd, onJobClick,
+  tech, jobs, dayStart, dayEnd, onJobClick, conflictSlot,
 }: {
   tech: Tech; jobs: Job[]; dayStart: Date; dayEnd: Date; onJobClick: (id: string) => void;
+  conflictSlot: string | null;
 }) => (
   <div className="flex border-b border-border last:border-b-0" style={{ height: ROW_HEIGHT }}>
     <div style={{ width: TECH_COL_WIDTH }} className="shrink-0 border-r border-border bg-muted/20 p-3">
@@ -329,7 +402,14 @@ const TechRow = ({
       <div className="truncate text-xs text-muted-foreground">{tech.email}</div>
     </div>
     <div className="relative flex">
-      {HOURS.map((h) => <SlotCell key={h} techId={tech.id} hour={h} />)}
+      {HOURS.map((h) => (
+        <SlotCell
+          key={h}
+          techId={tech.id}
+          hour={h}
+          conflict={conflictSlot === `slot:${tech.id}:${h}`}
+        />
+      ))}
       {jobs.map((job) => (
         <JobBlock key={job.id} job={job} dayStart={dayStart} dayEnd={dayEnd} onClick={() => onJobClick(job.id)} />
       ))}
@@ -337,7 +417,7 @@ const TechRow = ({
   </div>
 );
 
-const SlotCell = ({ techId, hour }: { techId: string; hour: number }) => {
+const SlotCell = ({ techId, hour, conflict }: { techId: string; hour: number; conflict: boolean }) => {
   const { setNodeRef, isOver } = useDroppable({ id: `slot:${techId}:${hour}` });
   return (
     <div
@@ -345,7 +425,8 @@ const SlotCell = ({ techId, hour }: { techId: string; hour: number }) => {
       style={{ width: SLOT_WIDTH }}
       className={cn(
         "h-full shrink-0 border-r border-border transition-colors",
-        isOver && "bg-primary/15 ring-2 ring-inset ring-primary",
+        isOver && !conflict && "bg-primary/15 ring-2 ring-inset ring-primary",
+        isOver && conflict && "bg-destructive/20 ring-2 ring-inset ring-destructive",
       )}
     />
   );

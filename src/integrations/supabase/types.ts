@@ -269,6 +269,7 @@ export type Database = {
           customer_name: string | null
           due_date: string | null
           id: string
+          invoice_number: number
           issued_at: string
           job_id: string | null
           organization_id: string
@@ -283,6 +284,7 @@ export type Database = {
           customer_name?: string | null
           due_date?: string | null
           id?: string
+          invoice_number?: number
           issued_at?: string
           job_id?: string | null
           organization_id: string
@@ -297,6 +299,7 @@ export type Database = {
           customer_name?: string | null
           due_date?: string | null
           id?: string
+          invoice_number?: number
           issued_at?: string
           job_id?: string | null
           organization_id?: string

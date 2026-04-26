@@ -44,7 +44,7 @@ const statusStyles: Record<EstimateStatus, string> = {
   SENT: "bg-accent text-accent-foreground",
   ACCEPTED: "bg-success/15 text-success",
   DECLINED: "bg-destructive/10 text-destructive",
-  EXPIRED: "bg-warning/15 text-warning",
+  EXPIRED: "bg-destructive/10 text-destructive",
 };
 
 const Estimates = () => {
@@ -80,8 +80,18 @@ const Estimates = () => {
     setAggregates({ accepted, outstanding, counts: c });
   }, []);
 
+  const expireOverdueEstimates = useCallback(async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    await supabase
+      .from("estimates")
+      .update({ status: "EXPIRED" })
+      .eq("status", "SENT")
+      .lt("valid_until", today);
+  }, []);
+
   const load = useCallback(async (isInitial: boolean) => {
     if (isInitial) setInitialLoading(true); else setPageLoading(true);
+    await expireOverdueEstimates();
     let query = supabase.from("estimates").select("*", { count: "exact" }).order("created_at", { ascending: false });
     if (statusFilter !== "ALL") query = query.eq("status", statusFilter);
     const q = debouncedSearch.trim();
@@ -96,7 +106,7 @@ const Estimates = () => {
     if (error) toast({ title: "Failed to load estimates", description: error.message, variant: "destructive" });
     else { setEstimates((data ?? []) as Estimate[]); setTotal(count ?? 0); }
     if (isInitial) setInitialLoading(false); else setPageLoading(false);
-  }, [debouncedSearch, statusFilter, page]);
+  }, [debouncedSearch, statusFilter, page, expireOverdueEstimates]);
 
   useEffect(() => { if (page !== 1) setPage(1); /* eslint-disable-next-line */ }, [debouncedSearch, statusFilter]);
   useEffect(() => { load(initialLoading); /* eslint-disable-next-line */ }, [load]);
@@ -202,7 +212,7 @@ const Estimates = () => {
         const { error } = await supabase.from("invoice_items").insert(invItems);
         if (error) throw error;
       }
-      toast({ title: `Invoice drafted from #${est.estimate_number}` });
+      toast({ title: `Invoice drafted from EST-${est.estimate_number}` });
       navigate("/invoices");
     } catch (err: any) {
       toast({ title: "Conversion failed", description: err?.message ?? "Unknown error", variant: "destructive" });
@@ -277,7 +287,7 @@ const Estimates = () => {
               <TableBody>
                 {estimates.map((est) => (
                   <TableRow key={est.id} className="cursor-pointer" onClick={() => openEdit(est)}>
-                    <TableCell className="font-mono text-xs text-muted-foreground">#{est.estimate_number}</TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">EST-{est.estimate_number}</TableCell>
                     <TableCell className="font-medium">{est.title}</TableCell>
                     <TableCell className="text-muted-foreground">{est.customer_name ?? "—"}</TableCell>
                     <TableCell className="text-muted-foreground">{est.valid_until ? format(new Date(est.valid_until), "MMM d, yyyy") : "—"}</TableCell>
@@ -289,7 +299,7 @@ const Estimates = () => {
                     <TableCell className="text-right font-mono text-sm">${Number(est.amount).toLocaleString()}</TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
-                        <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={() => copyPortalLink("estimate", est.portal_token)}>
+                        <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={() => copyPortalLink("estimate", est.portal_token, est.id)}>
                           <Share2 className="h-3 w-3" /> Share
                         </Button>
                         {est.status === "DRAFT" && (
@@ -326,7 +336,7 @@ const Estimates = () => {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-[760px] max-h-[92vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editing ? `Edit estimate #${editing.estimate_number}` : "New estimate"}</DialogTitle>
+            <DialogTitle>{editing ? `Edit estimate EST-${editing.estimate_number}` : "New estimate"}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">

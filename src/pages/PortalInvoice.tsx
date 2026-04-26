@@ -9,6 +9,7 @@ import { downloadInvoicePdf } from "@/lib/invoicePdf";
 
 interface Invoice {
   id: string;
+  invoice_number: number;
   customer_name: string | null;
   amount: number;
   status: "DRAFT" | "SENT" | "PAID" | "OVERDUE";
@@ -70,7 +71,7 @@ const PortalInvoice = () => {
     if (!invoice) return;
     await downloadInvoicePdf({
       companyName: orgName,
-      invoiceNumber: invoice.id.slice(0, 8).toUpperCase(),
+      invoiceNumber: `INV-${invoice.invoice_number}`,
       customerName: invoice.customer_name ?? "—",
       issueDate: format(new Date(invoice.issued_at), "MMM d, yyyy"),
       dueDate: invoice.due_date ? format(new Date(invoice.due_date), "MMM d, yyyy") : undefined,
@@ -107,7 +108,7 @@ const PortalInvoice = () => {
             </div>
             <div className="text-right">
               <h1 className="text-3xl font-bold tracking-tight">INVOICE</h1>
-              <div className="text-sm text-muted-foreground mt-1">#{invoice.id.slice(0, 8).toUpperCase()}</div>
+              <div className="text-sm text-muted-foreground mt-1">INV-{invoice.invoice_number}</div>
               <div className="mt-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-secondary text-secondary-foreground">
                 {invoice.status}
               </div>
