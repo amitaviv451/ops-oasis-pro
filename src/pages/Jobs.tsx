@@ -64,10 +64,11 @@ const Jobs = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | JobStatus>("ALL");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<Job | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [invoicingId, setInvoicingId] = useState<string | null>(null);
+  const [deletingJob, setDeletingJob] = useState<Job | null>(null);
+  const [confirmDeleting, setConfirmDeleting] = useState(false);
 
   const createInvoiceFromJob = async (job: Job) => {
     if (!user) return;
@@ -85,7 +86,8 @@ const Jobs = () => {
       customer_name: job.customer_name,
       amount,
       status: "DRAFT",
-    });
+      job_id: job.id,
+    } as any);
     setInvoicingId(null);
     if (error) {
       toast({ title: "Failed to create invoice", description: error.message, variant: "destructive" });
@@ -100,6 +102,7 @@ const Jobs = () => {
     const { data, error } = await supabase
       .from("jobs")
       .select("*")
+      .is("deleted_at", null)
       .order("created_at", { ascending: false });
     if (error) {
       toast({ title: "Failed to load jobs", description: error.message, variant: "destructive" });
@@ -107,6 +110,23 @@ const Jobs = () => {
       setJobs((data ?? []) as Job[]);
     }
     setLoading(false);
+  };
+
+  const softDeleteJob = async () => {
+    if (!deletingJob) return;
+    setConfirmDeleting(true);
+    const { error } = await supabase
+      .from("jobs")
+      .update({ deleted_at: new Date().toISOString() } as any)
+      .eq("id", deletingJob.id);
+    setConfirmDeleting(false);
+    if (error) {
+      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: `Job #${deletingJob.job_number} deleted` });
+    setDeletingJob(null);
+    loadJobs();
   };
 
   useEffect(() => {
