@@ -368,6 +368,45 @@ export type Database = {
           },
         ]
       }
+      job_notifications: {
+        Row: {
+          channel: string
+          error_detail: string | null
+          id: string
+          job_id: string
+          message_body: string
+          organization_id: string
+          sent_at: string
+          status: string
+          technician_id: string
+          twilio_message_sid: string | null
+        }
+        Insert: {
+          channel: string
+          error_detail?: string | null
+          id?: string
+          job_id: string
+          message_body: string
+          organization_id: string
+          sent_at?: string
+          status: string
+          technician_id: string
+          twilio_message_sid?: string | null
+        }
+        Update: {
+          channel?: string
+          error_detail?: string | null
+          id?: string
+          job_id?: string
+          message_body?: string
+          organization_id?: string
+          sent_at?: string
+          status?: string
+          technician_id?: string
+          twilio_message_sid?: string | null
+        }
+        Relationships: []
+      }
       job_timeline: {
         Row: {
           changed_at: string
@@ -567,21 +606,66 @@ export type Database = {
           },
         ]
       }
-      organizations: {
+      notifications: {
         Row: {
+          body: string | null
           created_at: string
           id: string
-          name: string
+          link: string | null
+          organization_id: string
+          read: boolean
+          title: string
+          type: string
+          user_id: string
         }
         Insert: {
+          body?: string | null
           created_at?: string
           id?: string
-          name: string
+          link?: string | null
+          organization_id: string
+          read?: boolean
+          title: string
+          type: string
+          user_id: string
         }
         Update: {
+          body?: string | null
           created_at?: string
           id?: string
+          link?: string | null
+          organization_id?: string
+          read?: boolean
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      organizations: {
+        Row: {
+          company_display_name: string | null
+          created_at: string
+          default_notification_channel: string
+          id: string
+          name: string
+          twilio_from_number: string | null
+        }
+        Insert: {
+          company_display_name?: string | null
+          created_at?: string
+          default_notification_channel?: string
+          id?: string
+          name: string
+          twilio_from_number?: string | null
+        }
+        Update: {
+          company_display_name?: string | null
+          created_at?: string
+          default_notification_channel?: string
+          id?: string
           name?: string
+          twilio_from_number?: string | null
         }
         Relationships: []
       }
@@ -632,21 +716,27 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string
+          notification_channel: string | null
           organization_id: string | null
+          phone: string | null
         }
         Insert: {
           created_at?: string
           email?: string | null
           full_name?: string | null
           id: string
+          notification_channel?: string | null
           organization_id?: string | null
+          phone?: string | null
         }
         Update: {
           created_at?: string
           email?: string | null
           full_name?: string | null
           id?: string
+          notification_channel?: string | null
           organization_id?: string | null
+          phone?: string | null
         }
         Relationships: [
           {
