@@ -1,9 +1,28 @@
 import { useEffect, useState } from "react";
 import { Briefcase, DollarSign, UserPlus, Receipt, TrendingUp, TrendingDown, AlertCircle } from "lucide-react";
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+
+// One-time welcome toast for newly bootstrapped accounts (e.g. Google OAuth signups)
+const WELCOME_KEY = "fp.welcomeShown";
+async function maybeWelcomeNewUser() {
+  if (localStorage.getItem(WELCOME_KEY)) return;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+  // Ensure profile + org exist (the DB trigger handles this; this is a safety net + freshness check)
+  const { data: profile } = await supabase
+    .from("profiles").select("id, organization_id, full_name").eq("id", user.id).maybeSingle();
+  if (!profile) return; // trigger will populate momentarily
+  const created = new Date(user.created_at).getTime();
+  const isFresh = Date.now() - created < 60_000;
+  if (isFresh) {
+    toast.success("Welcome to FieldPro! Set up your company in Settings.");
+  }
+  localStorage.setItem(WELCOME_KEY, "1");
+}
 
 interface KPI {
   openJobs: number;
@@ -32,6 +51,7 @@ const Dashboard = () => {
   const [unpaidCount, setUnpaidCount] = useState(0);
 
   useEffect(() => {
+    maybeWelcomeNewUser();
     (async () => {
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
