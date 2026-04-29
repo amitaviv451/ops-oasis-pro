@@ -68,8 +68,8 @@ const Login = () => {
             Continue with Google
           </Button>
 
-          <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
-            <div className="h-px flex-1 bg-border" /> OR <div className="h-px flex-1 bg-border" />
+          <div className="my-6 flex items-center gap-3 text-xs uppercase tracking-wide text-muted-foreground">
+            <div className="h-px flex-1 bg-border" /> or continue with email <div className="h-px flex-1 bg-border" />
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -91,6 +91,10 @@ const Login = () => {
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
             Don't have an account? <Link to="/register" className="font-semibold text-primary hover:underline">Sign up</Link>
+          </p>
+          <p className="mt-4 rounded-md border border-dashed border-border bg-muted/40 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+            <strong className="font-semibold">Dev note:</strong> Google sign-in requires Client ID + Secret in
+            Supabase → Auth → Providers → Google. The redirect URL must include <code>{`${window.location.origin}/dashboard`}</code>.
           </p>
         </div>
       </div>
