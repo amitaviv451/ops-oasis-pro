@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Building2, User, Palette, Sun, Moon, Monitor } from "lucide-react";
+import { Building2, User, Palette, Sun, Moon, Monitor, Shield, Check, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useOrgId } from "@/lib/useOrgId";
